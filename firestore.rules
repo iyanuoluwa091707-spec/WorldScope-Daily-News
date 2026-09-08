@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Health check / connection test document used at boot
+    match /test/connection {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Global reusable security helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Validation Blueprint for User profiles and preferences
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt']) &&
+             data.uid == request.auth.uid &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 254 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.createdAt is string && data.createdAt.size() <= 50 &&
+             data.updatedAt is string && data.updatedAt.size() <= 50 &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+             (!('savedArticles' in data) || (data.savedArticles is list && data.savedArticles.size() <= 200)) &&
+             (!('subscribedNewsletters' in data) || (data.subscribedNewsletters is list && data.subscribedNewsletters.size() <= 50));
+    }
+
+    // User profile and private preferences
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false; // PII protection: prevent user directory scraping
+      
+      allow create: if isSignedIn() && 
+                       isValidId(userId) && 
+                       request.auth.uid == userId && 
+                       isValidUser(incoming());
+
+      allow update: if isSignedIn() && 
+                       isValidId(userId) && 
+                       request.auth.uid == userId && 
+                       isValidUser(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'savedArticles', 'subscribedNewsletters', 'updatedAt']);
+
+      allow delete: if isSignedIn() && 
+                       isValidId(userId) && 
+                       request.auth.uid == userId;
+    }
+  }
+}

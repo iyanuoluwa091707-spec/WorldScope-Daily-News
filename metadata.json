@@ -1,0 +1,6 @@
+{
+  "name": "WorldScope Daily",
+  "description": "WorldScope Daily - Authoritative global news, in-depth sports coverage with live scores, business insights, technology analysis, and AI daily briefings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
