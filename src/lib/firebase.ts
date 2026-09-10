@@ -26,7 +26,9 @@ googleProvider.setCustomParameters({
 });
 
 // Initialize Cloud Firestore with dedicated database ID
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+export const db = firebaseConfig.firestoreDatabaseId
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
 
 // Validate Connection to Firestore on boot
 export async function validateFirestoreConnection(): Promise<boolean> {
