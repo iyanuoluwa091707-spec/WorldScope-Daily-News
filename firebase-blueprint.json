@@ -2,7 +2,7 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "Registered WorldScope Daily user profile with preferences and subscriptions",
+      "description": "Registered WorldScope Daily user profile with preferences, subscriptions, and payment tier",
       "type": "object",
       "properties": {
         "uid": {
@@ -41,6 +41,26 @@
         "subscribedNewsletters": {
           "type": "array",
           "description": "List of subscribed newsletter identifiers"
+        },
+        "subscriptionTier": {
+          "type": "string",
+          "enum": ["basic", "premium", "enterprise"],
+          "description": "Active subscription tier"
+        },
+        "subscriptionStatus": {
+          "type": "string",
+          "enum": ["active", "inactive", "trial", "canceled"],
+          "description": "State of user subscription"
+        },
+        "subscriptionExpiry": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Expiration date of active subscription"
+        },
+        "subscribedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when subscription was purchased"
         }
       },
       "required": ["uid", "email", "displayName", "createdAt", "updatedAt"]
@@ -51,7 +71,7 @@
       "schema": {
         "$ref": "#/entities/User"
       },
-      "description": "Stores user profile data, reading list bookmarks, and newsletter subscriptions"
+      "description": "Stores user profile data, reading list bookmarks, newsletter subscriptions, and premium status"
     }
   }
 }

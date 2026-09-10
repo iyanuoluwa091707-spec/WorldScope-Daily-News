@@ -10,6 +10,9 @@ interface HomeViewProps {
   categories: CategoryInfo[];
   onSelectArticle: (article: Article) => void;
   onSelectCategory: (cat: string) => void;
+  bookmarks?: Article[];
+  onToggleBookmark?: (article: Article) => void;
+  onOpenBookmarks?: () => void;
 }
 
 const FEED_PAGE_SIZE = 50;
@@ -19,9 +22,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
   categories,
   onSelectArticle,
   onSelectCategory,
+  bookmarks = [],
+  onToggleBookmark,
+  onOpenBookmarks,
 }) => {
   const [feedCategoryFilter, setFeedCategoryFilter] = useState<string>('All');
   const [feedPage, setFeedPage] = useState<number>(1);
+
+  const renderArticleCard = (
+    art: Article, 
+    variant: 'hero' | 'secondary' | 'compact' | 'grid' | 'live' = 'grid'
+  ) => {
+    const isBookmarked = Boolean(bookmarks?.some((b) => b.id === art.id));
+    return (
+      <ArticleCard
+        key={art.id}
+        article={art}
+        variant={variant}
+        onSelect={onSelectArticle}
+        isBookmarked={isBookmarked}
+        onToggleBookmark={onToggleBookmark}
+      />
+    );
+  };
 
   if (articles.length === 0) {
     return (
@@ -85,25 +108,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
         {/* Main Hero & Companions (Cols 1 to 8) with border-r border-gray-100 */}
         <section className="lg:col-span-8 flex flex-col lg:border-r lg:border-gray-100 lg:pr-8">
           {/* Top Lead Story */}
-          {heroArticle && (
-            <ArticleCard
-              article={heroArticle}
-              variant="hero"
-              onSelect={onSelectArticle}
-            />
-          )}
+          {heroArticle && renderArticleCard(heroArticle, 'hero')}
 
           {/* Companion Stories underneath Hero */}
           {companionStories.length > 0 && (
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {companionStories.map((art) => (
-                <ArticleCard
-                  key={art.id}
-                  article={art}
-                  variant="secondary"
-                  onSelect={onSelectArticle}
-                />
-              ))}
+              {companionStories.map((art) => renderArticleCard(art, 'secondary'))}
             </div>
           )}
         </section>
@@ -131,14 +141,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <h4 className="text-xs font-bold uppercase tracking-widest text-gray-400">
                 Live Stream Dispatch
               </h4>
-              {liveStories.slice(0, 2).map((liveArt) => (
-                <ArticleCard
-                  key={liveArt.id}
-                  article={liveArt}
-                  variant="live"
-                  onSelect={onSelectArticle}
-                />
-              ))}
+              {liveStories.slice(0, 2).map((liveArt) => renderArticleCard(liveArt, 'live'))}
             </div>
           )}
 
@@ -185,14 +188,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {ukArticles.map((art) => (
-              <ArticleCard
-                key={art.id}
-                article={art}
-                variant="grid"
-                onSelect={onSelectArticle}
-              />
-            ))}
+            {ukArticles.map((art) => renderArticleCard(art, 'grid'))}
           </div>
         </section>
       )}
@@ -218,14 +214,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {sportArticles.map((art) => (
-              <ArticleCard
-                key={art.id}
-                article={art}
-                variant="grid"
-                onSelect={onSelectArticle}
-              />
-            ))}
+            {sportArticles.map((art) => renderArticleCard(art, 'grid'))}
           </div>
         </section>
       )}
@@ -251,14 +240,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {healthArticles.map((art) => (
-              <ArticleCard
-                key={art.id}
-                article={art}
-                variant="grid"
-                onSelect={onSelectArticle}
-              />
-            ))}
+            {healthArticles.map((art) => renderArticleCard(art, 'grid'))}
           </div>
         </section>
       )}
@@ -284,14 +266,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {techArticles.map((art) => (
-              <ArticleCard
-                key={art.id}
-                article={art}
-                variant="grid"
-                onSelect={onSelectArticle}
-              />
-            ))}
+            {techArticles.map((art) => renderArticleCard(art, 'grid'))}
           </div>
         </section>
       )}
@@ -317,14 +292,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {bizArticles.map((art) => (
-              <ArticleCard
-                key={art.id}
-                article={art}
-                variant="grid"
-                onSelect={onSelectArticle}
-              />
-            ))}
+            {bizArticles.map((art) => renderArticleCard(art, 'grid'))}
           </div>
         </section>
       )}
@@ -350,14 +318,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {cultureArticles.map((art) => (
-              <ArticleCard
-                key={art.id}
-                article={art}
-                variant="grid"
-                onSelect={onSelectArticle}
-              />
-            ))}
+            {cultureArticles.map((art) => renderArticleCard(art, 'grid'))}
           </div>
         </section>
       )}
@@ -375,14 +336,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {customArticles.map((art) => (
-              <ArticleCard
-                key={art.id}
-                article={art}
-                variant="grid"
-                onSelect={onSelectArticle}
-              />
-            ))}
+            {customArticles.map((art) => renderArticleCard(art, 'grid'))}
           </div>
         </section>
       )}
@@ -436,11 +390,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span>Story #{startStreamIdx + idx + 1}</span>
                 <span>{art.category}</span>
               </div>
-              <ArticleCard
-                article={art}
-                variant="grid"
-                onSelect={onSelectArticle}
-              />
+              {renderArticleCard(art, 'grid')}
             </div>
           ))}
         </div>

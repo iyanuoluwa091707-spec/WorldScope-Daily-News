@@ -30,7 +30,7 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Validation Blueprint for User profiles and preferences
+    // Validation Blueprint for User profiles, preferences and subscription status
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt']) &&
              data.uid == request.auth.uid &&
@@ -41,10 +41,14 @@ service cloud.firestore {
              data.updatedAt is string && data.updatedAt.size() <= 50 &&
              (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
              (!('savedArticles' in data) || (data.savedArticles is list && data.savedArticles.size() <= 200)) &&
-             (!('subscribedNewsletters' in data) || (data.subscribedNewsletters is list && data.subscribedNewsletters.size() <= 50));
+             (!('subscribedNewsletters' in data) || (data.subscribedNewsletters is list && data.subscribedNewsletters.size() <= 50)) &&
+             (!('subscriptionTier' in data) || (data.subscriptionTier is string && data.subscriptionTier in ['basic', 'premium', 'enterprise'])) &&
+             (!('subscriptionStatus' in data) || (data.subscriptionStatus is string && data.subscriptionStatus in ['active', 'inactive', 'trial', 'canceled'])) &&
+             (!('subscriptionExpiry' in data) || (data.subscriptionExpiry is string && data.subscriptionExpiry.size() <= 60)) &&
+             (!('subscribedAt' in data) || (data.subscribedAt is string && data.subscribedAt.size() <= 60));
     }
 
-    // User profile and private preferences
+    // User profile, private preferences, and verified subscription status
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
       allow list: if false; // PII protection: prevent user directory scraping
@@ -58,11 +62,30 @@ service cloud.firestore {
                        isValidId(userId) && 
                        request.auth.uid == userId && 
                        isValidUser(incoming()) &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'savedArticles', 'subscribedNewsletters', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 
+                         'photoURL', 
+                         'savedArticles', 
+                         'subscribedNewsletters', 
+                         'subscriptionTier', 
+                         'subscriptionStatus', 
+                         'subscriptionExpiry', 
+                         'subscribedAt', 
+                         'updatedAt'
+                       ]);
 
       allow delete: if isSignedIn() && 
                        isValidId(userId) && 
                        request.auth.uid == userId;
+    }
+
+    // Public Advertiser Inquiries Submission
+    match /adInquiries/{inquiryId} {
+      allow create: if isValidId(inquiryId) && 
+                       incoming().keys().hasAll(['id', 'companyName', 'email', 'submittedAt']) &&
+                       incoming().companyName is string && incoming().companyName.size() <= 120 &&
+                       incoming().email is string && incoming().email.size() <= 254;
+      allow read, update, delete: if false;
     }
   }
 }

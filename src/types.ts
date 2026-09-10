@@ -55,6 +55,9 @@ export interface CategoryInfo {
   description: string;
 }
 
+export type SubscriptionTier = 'basic' | 'premium' | 'enterprise';
+export type SubscriptionStatus = 'active' | 'inactive' | 'trial' | 'canceled';
+
 export interface AppUser {
   uid: string;
   email: string;
@@ -63,4 +66,56 @@ export interface AppUser {
   providerId?: string;
   savedArticles?: string[];
   subscribedNewsletters?: string[];
+  subscriptionTier?: SubscriptionTier;
+  subscriptionStatus?: SubscriptionStatus;
+  subscriptionExpiry?: string;
+  subscribedAt?: string;
+  createdAt?: string;
+}
+
+export interface PremiumNewsletter {
+  id: string;
+  title: string;
+  edition: string;
+  date: string;
+  author: {
+    name: string;
+    role: string;
+    avatar?: string;
+  };
+  summary: string;
+  keyTakeaways: string[];
+  fullContent: string[];
+  tierRequired: SubscriptionTier;
+  readTime: string;
+  tags: string[];
+  metrics?: {
+    label: string;
+    value: string;
+    change: string;
+    isPositive: boolean;
+  }[];
+}
+
+export interface AdPackage {
+  id: string;
+  name: string;
+  price: string;
+  period: string;
+  impressions: string;
+  description: string;
+  benefits: string[];
+  recommended?: boolean;
+}
+
+export interface AdvertisementInquiry {
+  id: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  website: string;
+  packageId: string;
+  budget: string;
+  message: string;
+  submittedAt: string;
 }

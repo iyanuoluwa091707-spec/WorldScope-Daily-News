@@ -18,6 +18,8 @@ interface CategoryViewProps {
   articles: Article[];
   onSelectArticle: (article: Article) => void;
   onOpenNewsletters?: (initialId?: string) => void;
+  bookmarks?: Article[];
+  onToggleBookmark?: (article: Article) => void;
 }
 
 const ARTICLES_PER_PAGE = 50;
@@ -30,7 +32,10 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
   articles,
   onSelectArticle,
   onOpenNewsletters,
+  bookmarks = [],
+  onToggleBookmark,
 }) => {
+  const isBookmarked = (id: string) => Boolean(bookmarks?.some((b) => b.id === id));
   // If it's the Sport page, render the specialized BBC Sport View matching 5.PNG, 6.PNG, 7.PNG
   if (categoryName.toLowerCase() === 'sport') {
     return (
@@ -247,6 +252,8 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                 article={leadArticle}
                 variant="hero"
                 onSelect={onSelectArticle}
+                isBookmarked={isBookmarked(leadArticle.id)}
+                onToggleBookmark={onToggleBookmark}
               />
             </div>
 
@@ -258,6 +265,8 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                     article={secondArticle}
                     variant="secondary"
                     onSelect={onSelectArticle}
+                    isBookmarked={isBookmarked(secondArticle.id)}
+                    onToggleBookmark={onToggleBookmark}
                   />
                 </div>
               )}
@@ -268,6 +277,8 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                     article={thirdArticle}
                     variant="compact"
                     onSelect={onSelectArticle}
+                    isBookmarked={isBookmarked(thirdArticle.id)}
+                    onToggleBookmark={onToggleBookmark}
                   />
                 </div>
               )}
@@ -342,6 +353,8 @@ export const CategoryView: React.FC<CategoryViewProps> = ({
                   article={article}
                   variant="grid"
                   onSelect={onSelectArticle}
+                  isBookmarked={isBookmarked(article.id)}
+                  onToggleBookmark={onToggleBookmark}
                 />
               ))}
             </div>

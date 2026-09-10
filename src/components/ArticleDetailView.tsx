@@ -12,6 +12,7 @@ import {
   Send
 } from 'lucide-react';
 import { Article, CommentItem, AppUser } from '../types';
+import { ShareModal } from './ShareModal';
 
 interface ArticleDetailViewProps {
   article: Article;
@@ -23,6 +24,9 @@ interface ArticleDetailViewProps {
   currentUser?: AppUser | null;
   onToggleSaveArticle?: (articleId: string) => void;
   onOpenAuth?: (mode?: 'signin' | 'register') => void;
+  isBookmarked?: boolean;
+  onToggleBookmark?: (article: Article) => void;
+  onToast?: (message: string) => void;
 }
 
 export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
@@ -35,11 +39,11 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   currentUser,
   onToggleSaveArticle,
   onOpenAuth,
+  isBookmarked = false,
+  onToggleBookmark,
+  onToast,
 }) => {
-  const [copied, setCopied] = useState(false);
-  const isSavedInFirestore = Boolean(currentUser?.savedArticles?.includes(article.id));
-  const [localBookmarked, setLocalBookmarked] = useState(false);
-  const bookmarked = currentUser ? isSavedInFirestore : localBookmarked;
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [commentName, setCommentName] = useState(currentUser?.name || '');
   const [commentLocation, setCommentLocation] = useState('');
   const [commentBody, setCommentBody] = useState('');
@@ -53,18 +57,15 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   }, [currentUser, commentName]);
 
   const handleBookmarkToggle = () => {
-    if (currentUser) {
-      onToggleSaveArticle?.(article.id);
-    } else {
-      setLocalBookmarked(!localBookmarked);
-      onOpenAuth?.('signin');
+    if (onToggleBookmark) {
+      onToggleBookmark(article);
+    } else if (onToggleSaveArticle) {
+      onToggleSaveArticle(article.id);
     }
   };
 
-  const handleShare = () => {
-    navigator.clipboard?.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  const handleOpenShare = () => {
+    setIsShareModalOpen(true);
   };
 
   const handlePrint = () => {
@@ -95,13 +96,21 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   return (
     <article className="max-w-7xl mx-auto p-4 sm:p-8 font-sans">
       
-      {/* Breadcrumb Navigation & Back Link */}
-      <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-6 text-xs text-gray-500">
-        <div className="flex items-center space-x-2">
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        article={article}
+        onToast={onToast}
+      />
+
+      {/* Breadcrumb Navigation & Action Buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-gray-100 dark:border-neutral-800 pb-3 mb-6 text-xs text-gray-500">
+        <div className="flex items-center space-x-2 flex-wrap">
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center text-black font-bold hover:underline mr-2"
+            className="flex items-center text-black dark:text-white font-bold hover:underline mr-1 sm:mr-2 cursor-pointer min-h-[36px]"
           >
             <ArrowLeft className="w-3.5 h-3.5 mr-1" />
             <span>Back</span>
@@ -110,44 +119,55 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
           <button
             type="button"
             onClick={() => onSelectCategory(article.category)}
-            className="font-bold text-black hover:underline uppercase"
+            className="font-bold text-black dark:text-white hover:underline uppercase cursor-pointer min-h-[36px] flex items-center"
           >
             {article.category}
           </button>
           {article.subCategory && (
             <>
               <span>/</span>
-              <span className="text-gray-400">{article.subCategory}</span>
+              <span className="text-gray-400 truncate max-w-[120px] sm:max-w-none">{article.subCategory}</span>
             </>
           )}
         </div>
 
-        <div className="flex items-center space-x-3 text-gray-500">
+        <div className="flex items-center space-x-2 sm:space-x-2.5 text-gray-500 ml-auto sm:ml-0">
+          {/* Share Button (opens custom ShareModal) */}
           <button
             type="button"
-            onClick={handleShare}
-            className="hover:text-black flex items-center space-x-1"
-            title="Share or Copy Link"
+            onClick={handleOpenShare}
+            className="hover:text-black dark:hover:text-white flex items-center space-x-1.5 px-3 py-1.5 rounded-xs transition-colors cursor-pointer border border-neutral-200 dark:border-neutral-700 hover:border-black dark:hover:border-white min-h-[36px]"
+            title="Share this story"
+            aria-label="Share this story"
           >
-            {copied ? <Check className="w-4 h-4 text-black" /> : <Share2 className="w-4 h-4" />}
-            <span className="hidden sm:inline">{copied ? 'Copied' : 'Share'}</span>
+            <Share2 className="w-3.5 h-3.5 text-[#B80000]" />
+            <span className="font-bold text-black dark:text-white">Share</span>
           </button>
+
+          {/* Save Button with Visual Indicator */}
           <button
             type="button"
             onClick={handleBookmarkToggle}
-            className={`hover:text-black flex items-center space-x-1 ${bookmarked ? 'text-black font-bold' : ''}`}
-            title="Save for Later in WorldScope Cloud"
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xs transition-colors cursor-pointer border min-h-[36px] ${
+              isBookmarked 
+                ? 'border-[#B80000] bg-[#B80000]/10 text-[#B80000] font-black' 
+                : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white hover:border-black'
+            }`}
+            title={isBookmarked ? 'Saved to Bookmarks (Click to remove)' : 'Save to Bookmarks'}
+            aria-label={isBookmarked ? 'Saved to Bookmarks' : 'Save to Bookmarks'}
           >
-            <Bookmark className={`w-4 h-4 ${bookmarked ? 'fill-black' : ''}`} />
-            <span className="hidden sm:inline">{bookmarked ? 'Saved to Cloud' : 'Save'}</span>
+            <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current text-[#B80000]' : ''}`} />
+            <span>{isBookmarked ? 'Saved' : 'Save'}</span>
           </button>
+
           <button
             type="button"
             onClick={handlePrint}
-            className="hover:text-black hidden sm:flex items-center space-x-1"
+            className="hover:text-black dark:hover:text-white hidden sm:flex items-center space-x-1 cursor-pointer min-h-[36px] px-2"
             title="Print Article"
+            aria-label="Print Article"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-3.5 h-3.5" />
             <span>Print</span>
           </button>
         </div>
@@ -305,6 +325,39 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
               </div>
             </div>
           )}
+
+          {/* End of Story Share & Save Action Bar */}
+          <div className="mt-8 p-3.5 sm:p-4 bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400">
+                Share or bookmark this story
+              </span>
+            </div>
+            <div className="flex flex-col xs:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5">
+              <button
+                type="button"
+                onClick={handleOpenShare}
+                className="bg-[#B80000] hover:bg-[#990000] active:bg-[#800000] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer rounded-xs shadow-xs min-h-[42px]"
+                aria-label="Share story"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share Story</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleBookmarkToggle}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer rounded-xs border min-h-[42px] ${
+                  isBookmarked
+                    ? 'border-[#B80000] bg-[#B80000]/15 text-[#B80000] font-black'
+                    : 'border-neutral-300 dark:border-neutral-600 hover:border-black text-black dark:text-white'
+                }`}
+                aria-label={isBookmarked ? 'Saved in Bookmarks' : 'Save Story'}
+              >
+                <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current text-[#B80000]' : ''}`} />
+                <span>{isBookmarked ? 'Saved in Bookmarks' : 'Save Story'}</span>
+              </button>
+            </div>
+          </div>
 
           {/* Reader Discussion / Comments Section */}
           <section className="mt-12 pt-8 border-t border-gray-200">

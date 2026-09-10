@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import type { FirebaseUser } from './firebase';
+import type { SubscriptionTier, SubscriptionStatus, AdvertisementInquiry } from '../types';
 
 export interface UserProfile {
   uid: string;
@@ -11,9 +12,14 @@ export interface UserProfile {
   updatedAt: string;
   savedArticles?: string[];
   subscribedNewsletters?: string[];
+  subscriptionTier?: SubscriptionTier;
+  subscriptionStatus?: SubscriptionStatus;
+  subscriptionExpiry?: string;
+  subscribedAt?: string;
 }
 
 const USERS_COLLECTION = 'users';
+const AD_INQUIRIES_COLLECTION = 'adInquiries';
 
 /**
  * Fetch a user's persisted profile and preferences from Firestore
@@ -76,6 +82,8 @@ export async function syncUserProfile(
         updatedAt: now,
         savedArticles: [],
         subscribedNewsletters: ['global-dispatch'],
+        subscriptionTier: 'basic',
+        subscriptionStatus: 'inactive',
       };
 
       await setDoc(userDocRef, newProfile);
@@ -93,8 +101,53 @@ export async function syncUserProfile(
       updatedAt: now,
       savedArticles: [],
       subscribedNewsletters: ['global-dispatch'],
+      subscriptionTier: 'basic',
+      subscriptionStatus: 'inactive',
     };
   }
+}
+
+/**
+ * Update user subscription status in Cloud Firestore
+ */
+export async function updateUserSubscription(
+  uid: string,
+  tier: SubscriptionTier,
+  durationMonths: number = 12
+): Promise<{
+  subscriptionTier: SubscriptionTier;
+  subscriptionStatus: SubscriptionStatus;
+  subscriptionExpiry: string;
+  subscribedAt: string;
+}> {
+  const now = new Date();
+  const subscribedAt = now.toISOString();
+  
+  // Calculate expiry date
+  const expiryDate = new Date(now);
+  expiryDate.setMonth(expiryDate.getMonth() + durationMonths);
+  const subscriptionExpiry = expiryDate.toISOString();
+  const subscriptionStatus: SubscriptionStatus = 'active';
+
+  try {
+    const userDocRef = doc(db, USERS_COLLECTION, uid);
+    await updateDoc(userDocRef, {
+      subscriptionTier: tier,
+      subscriptionStatus,
+      subscriptionExpiry,
+      subscribedAt,
+      updatedAt: subscribedAt,
+    });
+  } catch (error) {
+    console.error('Error updating subscription in Firestore:', error);
+  }
+
+  return {
+    subscriptionTier: tier,
+    subscriptionStatus,
+    subscriptionExpiry,
+    subscribedAt,
+  };
 }
 
 /**
@@ -138,5 +191,17 @@ export async function syncNewslettersToFirestore(
     });
   } catch (error) {
     console.error('Error updating newsletter subscriptions in Firestore:', error);
+  }
+}
+
+/**
+ * Submit an advertising inquiry to Cloud Firestore
+ */
+export async function submitAdInquiry(inquiry: AdvertisementInquiry): Promise<void> {
+  try {
+    const inquiryRef = doc(db, AD_INQUIRIES_COLLECTION, inquiry.id);
+    await setDoc(inquiryRef, inquiry);
+  } catch (error) {
+    console.error('Error submitting advertisement inquiry to Firestore:', error);
   }
 }

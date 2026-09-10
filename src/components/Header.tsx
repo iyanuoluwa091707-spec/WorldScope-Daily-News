@@ -12,11 +12,14 @@ import {
   ShieldCheck, 
   LogOut,
   ArrowRight,
-  Bell
+  Bell,
+  Crown,
+  Sparkles
 } from 'lucide-react';
-import { CategoryInfo, Article } from '../types';
+import { CategoryInfo, Article, AppUser } from '../types';
 import { getCategoryTheme } from '../data/categoryThemes';
 import { Logo } from './Logo';
+import { DarkModeToggle } from './DarkModeToggle';
 
 interface HeaderProps {
   categories: CategoryInfo[];
@@ -30,9 +33,13 @@ interface HeaderProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   searchResults: Article[];
-  currentUser?: { email: string; name: string } | null;
+  currentUser?: AppUser | null;
   onOpenAuth?: (mode: 'signin' | 'register') => void;
   onSignOut?: () => void;
+  onOpenSubscriptionPlans?: () => void;
+  onOpenPremiumNewsletter?: () => void;
+  bookmarksCount?: number;
+  onOpenBookmarks?: () => void;
 }
 
 interface NavSection {
@@ -58,6 +65,10 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser,
   onOpenAuth,
   onSignOut,
+  onOpenSubscriptionPlans,
+  onOpenPremiumNewsletter,
+  bookmarksCount = 0,
+  onOpenBookmarks,
 }) => {
   // Navigation Menu Open State (matches 1.PNG when true, 2.PNG when false)
   const [menuOpen, setMenuOpen] = useState(false);
@@ -325,25 +336,25 @@ export const Header: React.FC<HeaderProps> = ({
   ];
 
   return (
-    <header className="w-full sticky top-0 z-50 bg-white shadow-xs">
+    <header className="w-full sticky top-0 z-50 bg-white dark:bg-[#121212] shadow-xs border-t-4 border-[#B80000] transition-colors duration-200">
       
       {/* 
         ========================================================================
         ROW 1: PRIMARY WORLDSCOPE DAILY UNIVERSAL HEADER
         ========================================================================
       */}
-      <div className="w-full bg-white border-b border-neutral-300 h-14 sm:h-16 px-2.5 sm:px-6 relative z-50">
-        <div className="max-w-7xl mx-auto h-full flex items-center justify-between relative">
+      <div className="w-full bg-white dark:bg-[#121212] border-b border-neutral-300 dark:border-neutral-800 h-14 sm:h-16 px-2 sm:px-4 md:px-6 relative z-50 transition-colors duration-200">
+        <div className="max-w-7xl mx-auto h-full flex items-center justify-between gap-1 sm:gap-2 relative">
           
           {/* Left: ≡Q Combined Button or ✕ Close Button when menu is open */}
           <div className="flex items-center z-10 shrink-0">
             {!menuOpen ? (
-              <div className="flex items-center bg-neutral-200 hover:bg-neutral-300 transition-colors p-1 sm:p-1.5 gap-0.5 sm:gap-1.5 rounded-xs">
+              <div className="flex items-center bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 transition-colors p-1 sm:p-1.5 gap-0.5 sm:gap-1.5 rounded-xs">
                 <button
                   id="worldscope-hamburger-button"
                   type="button"
                   onClick={handleToggleMenu}
-                  className="p-1 text-black hover:opacity-75 focus:outline-none cursor-pointer"
+                  className="p-1 text-black dark:text-white hover:opacity-75 focus:outline-none cursor-pointer"
                   title="Open Navigation Menu"
                   aria-label="Open navigation menu"
                 >
@@ -353,7 +364,7 @@ export const Header: React.FC<HeaderProps> = ({
                   id="worldscope-search-icon-button"
                   type="button"
                   onClick={handleOpenSearch}
-                  className="p-1 text-black hover:opacity-75 focus:outline-none cursor-pointer"
+                  className="p-1 text-black dark:text-white hover:opacity-75 focus:outline-none cursor-pointer"
                   title="Search WorldScope Daily"
                   aria-label="Search"
                 >
@@ -365,7 +376,7 @@ export const Header: React.FC<HeaderProps> = ({
                 id="worldscope-close-menu-button"
                 type="button"
                 onClick={handleToggleMenu}
-                className="bg-black text-white w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center font-bold hover:bg-neutral-800 transition-colors cursor-pointer rounded-xs"
+                className="bg-black dark:bg-neutral-800 text-white w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center font-bold hover:bg-neutral-800 dark:hover:bg-neutral-700 transition-colors cursor-pointer rounded-xs"
                 aria-label="Close WorldScope Navigation Menu"
                 title="Close Menu"
               >
@@ -374,8 +385,9 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Center: Iconic WorldScope Daily Logo - Centered with flex-nowrap to guarantee Daily never covers WorldScope */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-0 flex items-center justify-center pointer-events-auto max-w-[calc(100%-120px)] sm:max-w-none">
+          {/* Center: Iconic WorldScope Daily Logo */}
+          {/* Responsive positioning: within flex flow on mobile/tablet to prevent any overlapping, absolute centered on lg */}
+          <div className="flex-1 min-w-0 flex items-center justify-center px-1 sm:px-2 z-0 lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 pointer-events-auto">
             <button
               id="worldscope-center-logo"
               type="button"
@@ -384,24 +396,60 @@ export const Header: React.FC<HeaderProps> = ({
                 onSelectSubCategory(undefined);
                 setMenuOpen(false);
               }}
-              className="flex items-center focus:outline-none cursor-pointer group flex-nowrap whitespace-nowrap"
+              className="flex items-center focus:outline-none cursor-pointer group flex-nowrap whitespace-nowrap min-w-0"
               title="WorldScope Daily Homepage"
               aria-label="WorldScope Daily Homepage"
             >
-              <Logo variant="header" theme="light" />
+              <Logo variant="header" />
             </button>
           </div>
 
-          {/* Right: Register + Sign In */}
-          <div className="flex items-center gap-1 sm:gap-3 z-10 shrink-0">
+          {/* Right: Dark Mode + Saved Articles + Subscribe + Register + Sign In */}
+          <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 z-10 shrink-0">
+            {/* Bookmarks / Saved Articles Button */}
+            <button
+              id="worldscope-bookmarks-button"
+              type="button"
+              onClick={onOpenBookmarks}
+              className="relative flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs font-bold text-black dark:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-xs transition-colors cursor-pointer shrink-0 border border-neutral-200 dark:border-neutral-700"
+              title={`Saved Articles (${bookmarksCount})`}
+              aria-label={`Saved Articles (${bookmarksCount})`}
+            >
+              <Bookmark className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${bookmarksCount > 0 ? 'fill-[#B80000] text-[#B80000]' : ''}`} />
+              <span className="hidden sm:inline">Saved</span>
+              {bookmarksCount > 0 && (
+                <span className="inline-flex items-center justify-center bg-[#B80000] text-white text-[10px] font-black min-w-[18px] h-[18px] px-1 rounded-full">
+                  {bookmarksCount}
+                </span>
+              )}
+            </button>
+
+            <DarkModeToggle className="p-1 sm:px-2.5 sm:py-1.5 shrink-0" />
+
             {currentUser ? (
-              <div className="flex items-center gap-1.5 sm:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-2.5">
+                {currentUser.subscriptionStatus === 'active' ? (
+                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-black dark:bg-[#222] text-[#FFD200] border border-[#FFD200]/40 rounded-xs text-[10px] font-black uppercase tracking-wider">
+                    <Crown className="w-3 h-3 text-[#FFD200]" />
+                    <span>{currentUser.subscriptionTier || 'PRO'}</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onOpenSubscriptionPlans}
+                    className="inline-flex items-center gap-1 bg-[#B80000] hover:bg-[#990000] text-white px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold rounded-xs cursor-pointer shadow-xs transition-colors uppercase tracking-wider shrink-0"
+                  >
+                    <Crown className="w-3 h-3 text-[#FFD200] shrink-0" />
+                    <span className="hidden xs:inline">Subscribe</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => onOpenAuth?.('signin')}
-                  className="flex items-center gap-1 text-xs sm:text-sm font-bold text-black hover:underline cursor-pointer"
+                  className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-black dark:text-white hover:underline cursor-pointer"
                 >
-                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#006def] text-white flex items-center justify-center text-xs font-bold">
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#B80000] text-white flex items-center justify-center text-xs font-bold shrink-0">
                     {currentUser.name.charAt(0).toUpperCase()}
                   </div>
                   <span className="hidden md:inline font-bold">{currentUser.name}</span>
@@ -409,18 +457,28 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   type="button"
                   onClick={onSignOut}
-                  className="text-xs text-neutral-600 hover:text-black font-semibold underline cursor-pointer"
+                  className="text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white font-semibold underline cursor-pointer"
                 >
                   Sign out
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-1 sm:gap-2">
+              <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
+                <button
+                  id="worldscope-header-subscribe-btn"
+                  type="button"
+                  onClick={onOpenSubscriptionPlans}
+                  className="inline-flex items-center gap-1 bg-[#B80000] hover:bg-[#990000] text-white px-2 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold rounded-xs cursor-pointer shadow-xs transition-colors uppercase tracking-wider shrink-0"
+                >
+                  <Crown className="w-3 h-3 text-[#FFD200] shrink-0" />
+                  <span>Subscribe</span>
+                </button>
+
                 <button
                   id="worldscope-register-button"
                   type="button"
                   onClick={() => onOpenAuth?.('register')}
-                  className="hidden sm:inline-flex items-center bg-black text-white hover:bg-neutral-800 px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-bold transition-colors cursor-pointer whitespace-nowrap rounded-xs"
+                  className="hidden md:inline-flex items-center bg-black dark:bg-[#252525] text-white hover:bg-neutral-800 dark:hover:bg-neutral-700 px-3 py-1.5 text-xs sm:text-sm font-bold transition-colors cursor-pointer whitespace-nowrap rounded-xs border border-transparent dark:border-neutral-700 shrink-0"
                 >
                   Register
                 </button>
@@ -428,10 +486,10 @@ export const Header: React.FC<HeaderProps> = ({
                   id="worldscope-signin-button"
                   type="button"
                   onClick={() => onOpenAuth?.('signin')}
-                  className="text-black font-bold text-xs sm:text-sm hover:underline px-2 py-1 sm:py-1.5 cursor-pointer whitespace-nowrap flex items-center gap-1"
+                  className="text-black dark:text-white font-bold text-xs sm:text-sm hover:underline px-1 sm:px-2 py-1 sm:py-1.5 cursor-pointer whitespace-nowrap flex items-center gap-1 shrink-0"
                 >
                   <User className="w-3.5 h-3.5 sm:hidden" />
-                  <span>Sign In</span>
+                  <span className="hidden xs:inline">Sign In</span>
                 </button>
               </div>
             )}
@@ -446,7 +504,7 @@ export const Header: React.FC<HeaderProps> = ({
         ========================================================================
       */}
       {!menuOpen && (
-        <nav className="hidden lg:block w-full bg-white border-b border-neutral-300">
+        <nav className="hidden lg:block w-full bg-white dark:bg-[#121212] border-b border-neutral-300 dark:border-neutral-800 transition-colors duration-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-3 sm:gap-6 overflow-x-auto no-scrollbar text-xs sm:text-sm h-10 sm:h-11">
             {mainNavItems.map((item) => {
               const isSelected =
@@ -465,8 +523,8 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className={`h-full flex items-center px-1 font-bold whitespace-nowrap transition-colors border-b-4 cursor-pointer ${
                     isSelected
-                      ? 'border-black text-black font-black'
-                      : 'border-transparent text-neutral-800 hover:text-black hover:border-neutral-300'
+                      ? 'border-[#B80000] text-black dark:text-white font-black'
+                      : 'border-transparent text-neutral-800 dark:text-neutral-300 hover:text-black dark:hover:text-white hover:border-neutral-300 dark:hover:border-neutral-700'
                   }`}
                 >
                   {item.label}
@@ -474,7 +532,7 @@ export const Header: React.FC<HeaderProps> = ({
               );
             })}
 
-            <span className="text-neutral-300 font-light select-none px-0.5">|</span>
+            <span className="text-neutral-300 dark:text-neutral-700 font-light select-none px-0.5">|</span>
 
             {mediaNavItems.map((item) => {
               const isSelected = activeCategory.toLowerCase() === item.target.toLowerCase();
@@ -489,14 +547,31 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className={`h-full flex items-center px-1 font-bold whitespace-nowrap transition-colors border-b-4 cursor-pointer ${
                     isSelected
-                      ? 'border-black text-black font-black'
-                      : 'border-transparent text-neutral-800 hover:text-black hover:border-neutral-300'
+                      ? 'border-[#B80000] text-black dark:text-white font-black'
+                      : 'border-transparent text-neutral-800 dark:text-neutral-300 hover:text-black dark:hover:text-white hover:border-neutral-300 dark:hover:border-neutral-700'
                   }`}
                 >
                   {item.label}
                 </button>
               );
             })}
+
+            <span className="text-neutral-300 font-light select-none px-0.5">|</span>
+
+            {/* Premium Executive Newsletter Entry Point */}
+            <button
+              type="button"
+              id="nav-item-executive-briefing"
+              onClick={onOpenPremiumNewsletter}
+              className="h-full flex items-center gap-1.5 px-2 font-black text-[#B80000] hover:bg-red-50/70 border-b-4 border-transparent hover:border-[#B80000] transition-colors cursor-pointer"
+              title="Access Subscriber Intelligence Briefing"
+            >
+              <Crown className="w-3.5 h-3.5 text-[#FFD200] fill-[#FFD200]" />
+              <span className="text-xs uppercase tracking-wider">Executive Briefing</span>
+              <span className="bg-[#FFD200] text-black text-[9px] px-1 py-0.2 rounded-xs font-black">
+                PRO
+              </span>
+            </button>
           </div>
         </nav>
       )}
@@ -509,18 +584,18 @@ export const Header: React.FC<HeaderProps> = ({
       {menuOpen && (
         <div 
           id="worldscope-full-navigation-overlay"
-          className="fixed inset-x-0 top-14 sm:top-16 bottom-0 bg-white z-40 overflow-y-auto overscroll-contain touch-pan-y animate-in slide-in-from-top-2 duration-150 border-b border-black"
+          className="fixed inset-x-0 top-14 sm:top-16 bottom-0 bg-white dark:bg-[#121212] z-40 overflow-y-auto overscroll-contain touch-pan-y animate-in slide-in-from-top-2 duration-150 border-b border-black dark:border-neutral-800"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {/* Top Account Strip in Menu (Matches 1.PNG) */}
-          <div className="bg-neutral-100 border-b border-neutral-200 px-4 sm:px-6 py-2.5">
+          <div className="bg-neutral-100 dark:bg-[#1a1a1a] border-b border-neutral-200 dark:border-neutral-800 px-4 sm:px-6 py-2.5">
             {currentUser ? (
               <div className="flex items-center justify-between w-full max-w-3xl mx-auto">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-[#006def] text-white flex items-center justify-center text-xs font-bold">
                     {currentUser.name.charAt(0).toUpperCase()}
                   </div>
-                  <span className="text-xs sm:text-sm font-bold text-black">{currentUser.name}</span>
+                  <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{currentUser.name}</span>
                 </div>
                 <button
                   type="button"
@@ -528,14 +603,14 @@ export const Header: React.FC<HeaderProps> = ({
                     onSignOut?.();
                     setMenuOpen(false);
                   }}
-                  className="text-xs font-semibold text-neutral-600 hover:text-black underline cursor-pointer"
+                  className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white underline cursor-pointer"
                 >
                   Sign out
                 </button>
               </div>
             ) : (
               <div className="flex items-center justify-between w-full max-w-3xl mx-auto">
-                <span className="text-xs sm:text-sm font-medium text-neutral-600">WorldScope Account</span>
+                <span className="text-xs sm:text-sm font-medium text-neutral-600 dark:text-neutral-400">WorldScope Account</span>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
@@ -543,18 +618,18 @@ export const Header: React.FC<HeaderProps> = ({
                       onOpenAuth?.('signin');
                       setMenuOpen(false);
                     }}
-                    className="text-xs sm:text-sm font-bold text-black hover:underline cursor-pointer"
+                    className="text-xs sm:text-sm font-bold text-black dark:text-white hover:underline cursor-pointer"
                   >
                     Sign In
                   </button>
-                  <span className="text-neutral-300">|</span>
+                  <span className="text-neutral-300 dark:text-neutral-700">|</span>
                   <button
                     type="button"
                     onClick={() => {
                       onOpenAuth?.('register');
                       setMenuOpen(false);
                     }}
-                    className="text-xs sm:text-sm font-bold text-black hover:underline cursor-pointer"
+                    className="text-xs sm:text-sm font-bold text-black dark:text-white hover:underline cursor-pointer"
                   >
                     Register
                   </button>
@@ -563,14 +638,37 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
+          {/* Saved Articles Quick Link Strip in Menu */}
+          <div className="bg-neutral-50 dark:bg-[#151515] border-b border-neutral-200 dark:border-neutral-800 px-4 sm:px-6 py-2.5">
+            <div className="flex items-center justify-between w-full max-w-3xl mx-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenBookmarks?.();
+                }}
+                className="flex items-center gap-2 text-xs sm:text-sm font-bold text-black dark:text-white hover:text-[#B80000] transition-colors cursor-pointer min-h-[38px]"
+              >
+                <Bookmark className={`w-4 h-4 ${bookmarksCount > 0 ? 'fill-[#B80000] text-[#B80000]' : ''}`} />
+                <span>My Saved Articles</span>
+                {bookmarksCount > 0 && (
+                  <span className="bg-[#B80000] text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                    {bookmarksCount}
+                  </span>
+                )}
+              </button>
+              <span className="text-[11px] text-neutral-500 hidden xs:inline">Accessible offline & across sessions</span>
+            </div>
+          </div>
+
           {/* 1. Search Box with Black Square Button (1.PNG) */}
-          <div className="p-3 sm:p-4 bg-white border-b border-neutral-200">
+          <div className="p-3 sm:p-4 bg-white dark:bg-[#121212] border-b border-neutral-200 dark:border-neutral-800">
             <form 
               onSubmit={(e) => {
                 e.preventDefault();
                 // If there are search results, highlight them or keep menu open
               }}
-              className="flex items-stretch border border-neutral-300 focus-within:border-black max-w-3xl mx-auto w-full"
+              className="flex items-stretch border border-neutral-300 dark:border-neutral-700 focus-within:border-black dark:focus-within:border-white max-w-3xl mx-auto w-full"
             >
               <input
                 ref={searchInputRef}
@@ -579,7 +677,7 @@ export const Header: React.FC<HeaderProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search news, topics and more"
-                className="flex-1 px-3.5 sm:px-4 py-2.5 text-sm sm:text-base text-black placeholder:text-neutral-500 focus:outline-none bg-white font-medium"
+                className="flex-1 px-3.5 sm:px-4 py-2.5 text-sm sm:text-base text-black dark:text-white placeholder:text-neutral-500 focus:outline-none bg-white dark:bg-[#181818] font-medium"
               />
               
               {searchQuery && (
@@ -755,6 +853,14 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </div>
             )}
+
+            {/* Appearance Theme Row in Menu */}
+            <div className="border-b border-neutral-200 dark:border-neutral-800 py-3.5 px-4 sm:px-6 flex items-center justify-between">
+              <span className="text-base font-bold text-black dark:text-white tracking-tight">
+                Dark Mode / Theme
+              </span>
+              <DarkModeToggle />
+            </div>
 
           </nav>
         </div>
