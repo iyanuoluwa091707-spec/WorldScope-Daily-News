@@ -26,7 +26,7 @@ html.dark {
   background-color: #0e0e0e;
 }
 
-html.dark .bg-white {
+html.dark .bg-white:not(#worldscope-google-signin-btn) {
   background-color: #141414 !important;
 }
 
@@ -70,6 +70,25 @@ html.dark .border-gray-100 {
 
 html.dark .border-black {
   border-color: #383838 !important;
+}
+
+/* Ensure Google Sign-In button retains official high-contrast white styling and legible text */
+#worldscope-google-signin-btn,
+html.dark #worldscope-google-signin-btn {
+  background-color: #ffffff !important;
+  color: #1f1f1f !important;
+  border-color: #dadce0 !important;
+}
+
+#worldscope-google-signin-btn span,
+html.dark #worldscope-google-signin-btn span {
+  color: #1f1f1f !important;
+}
+
+#worldscope-google-signin-btn:hover,
+html.dark #worldscope-google-signin-btn:hover {
+  background-color: #f8f9fa !important;
+  color: #1f1f1f !important;
 }
 
 /* WorldScope specific editorial typography */

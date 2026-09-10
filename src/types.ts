@@ -13,6 +13,26 @@ export interface CommentItem {
   comment: string;
   timestamp: string;
   upvotes: number;
+  userId?: string;
+}
+
+export interface ArticleLikeRecord {
+  id: string;
+  articleId: string;
+  userId: string;
+  userName?: string;
+  createdAt: string;
+}
+
+export interface ArticleCommentRecord {
+  id: string;
+  articleId: string;
+  userId: string;
+  userName: string;
+  userLocation?: string;
+  comment: string;
+  createdAt: string;
+  upvotes?: number;
 }
 
 export interface Article {
@@ -43,6 +63,7 @@ export interface Article {
   liveUpdates?: LiveUpdate[];
   tags: string[];
   commentsCount: number;
+  likesCount?: number;
   views: number;
   comments: CommentItem[];
   isCustom?: boolean;

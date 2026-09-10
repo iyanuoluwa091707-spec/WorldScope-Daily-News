@@ -31,6 +31,7 @@ interface AuthModalProps {
   initialMode?: 'signin' | 'register';
   currentUser: AppUser | null;
   onSignInSuccess?: (user: AppUser) => void;
+  onSignIn?: (email: string, name?: string) => void;
   onSignOut?: () => void;
 }
 
@@ -61,6 +62,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialMode = 'signin',
   currentUser,
   onSignInSuccess,
+  onSignIn,
   onSignOut,
 }) => {
   const [mode, setMode] = useState<'signin' | 'register'>(initialMode);
@@ -164,6 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       };
 
       onSignInSuccess?.(appUser);
+      onSignIn?.(appUser.email, appUser.name);
       setInfoMessage('Successfully signed in with Google!');
     } catch (err) {
       console.error('Google sign-in error:', err);
@@ -217,6 +220,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         };
 
         onSignInSuccess?.(appUser);
+        onSignIn?.(appUser.email, appUser.name);
         setInfoMessage('Your WorldScope account was created successfully!');
       } else {
         // Sign into existing account with Firebase Auth
@@ -239,6 +243,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         };
 
         onSignInSuccess?.(appUser);
+        onSignIn?.(appUser.email, appUser.name);
         setInfoMessage('Signed in successfully.');
       }
     } catch (err) {
@@ -478,14 +483,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 id="worldscope-google-signin-btn"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading}
-                className="w-full bg-white hover:bg-neutral-100 text-neutral-900 font-bold py-2.5 px-4 text-sm transition-colors rounded-xs cursor-pointer flex items-center justify-center gap-3 border border-neutral-300 shadow-sm disabled:opacity-50"
+                style={{
+                  backgroundColor: '#ffffff',
+                  color: '#1f1f1f',
+                  borderColor: '#dadce0',
+                }}
+                className="w-full font-bold py-2.5 px-4 text-sm transition-colors rounded-xs cursor-pointer flex items-center justify-center gap-3 border shadow-sm disabled:opacity-50"
               >
                 {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-neutral-800" />
+                  <Loader2 className="w-5 h-5 animate-spin text-[#1f1f1f]" />
                 ) : (
                   <GoogleIcon />
                 )}
-                <span>
+                <span className="text-[#1f1f1f] font-bold text-sm tracking-normal">
                   {mode === 'register' ? 'Register with Google' : 'Sign in with Google'}
                 </span>
               </button>

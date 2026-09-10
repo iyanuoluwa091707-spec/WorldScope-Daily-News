@@ -79,6 +79,65 @@ service cloud.firestore {
                        request.auth.uid == userId;
     }
 
+    // Validation Blueprint for Article Likes
+    function isValidLike(data) {
+      return data.keys().hasAll(['id', 'articleId', 'userId', 'createdAt']) &&
+             data.keys().size() <= 6 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.articleId is string && data.articleId.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.createdAt is string && data.createdAt.size() <= 50 &&
+             (!('userName' in data) || (data.userName is string && data.userName.size() <= 100));
+    }
+
+    // Article Likes: authenticated users only can like and unlike
+    match /articleLikes/{likeId} {
+      allow read: if true;
+      allow create: if isSignedIn() && 
+                       isValidId(likeId) && 
+                       isValidLike(incoming()) && 
+                       request.auth.uid == incoming().userId && 
+                       likeId == incoming().id;
+      allow delete: if isSignedIn() && 
+                       isValidId(likeId) && 
+                       request.auth.uid == existing().userId;
+      allow update: if false;
+    }
+
+    // Validation Blueprint for Article Comments
+    function isValidComment(data) {
+      return data.keys().hasAll(['id', 'articleId', 'userId', 'userName', 'comment', 'createdAt']) &&
+             data.keys().size() <= 9 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.articleId is string && data.articleId.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() <= 100 &&
+             data.comment is string && data.comment.size() >= 1 && data.comment.size() <= 1500 &&
+             data.createdAt is string && data.createdAt.size() <= 50 &&
+             (!('userLocation' in data) || (data.userLocation is string && data.userLocation.size() <= 100)) &&
+             (!('upvotes' in data) || (data.upvotes is number));
+    }
+
+    // Article Comments: public read, but strictly authenticated create/delete
+    match /articleComments/{commentId} {
+      allow read: if true;
+      allow create: if isSignedIn() && 
+                       isValidId(commentId) && 
+                       isValidComment(incoming()) && 
+                       request.auth.uid == incoming().userId && 
+                       commentId == incoming().id;
+      allow update: if isSignedIn() && 
+                       isValidId(commentId) && 
+                       request.auth.uid == existing().userId && 
+                       isValidComment(incoming()) && 
+                       incoming().diff(existing()).affectedKeys().hasOnly(['comment', 'upvotes']);
+      allow delete: if isSignedIn() && 
+                       isValidId(commentId) && 
+                       request.auth.uid == existing().userId;
+    }
+
     // Public Advertiser Inquiries Submission
     match /adInquiries/{inquiryId} {
       allow create: if isValidId(inquiryId) && 

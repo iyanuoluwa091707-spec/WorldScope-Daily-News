@@ -64,6 +64,84 @@
         }
       },
       "required": ["uid", "email", "displayName", "createdAt", "updatedAt"]
+    },
+    "ArticleLike": {
+      "title": "ArticleLike",
+      "description": "User like record for an article or editorial post",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique like identifier composed of articleId_userId"
+        },
+        "articleId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "ID of the liked article"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "UID of the authenticated user who liked the post"
+        },
+        "userName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Display name of the user who liked"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp when the like was created"
+        }
+      },
+      "required": ["id", "articleId", "userId", "createdAt"]
+    },
+    "ArticleComment": {
+      "title": "ArticleComment",
+      "description": "Reader discussion comment on an article",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique comment identifier"
+        },
+        "articleId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "ID of the article being commented on"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "UID of the authenticated author"
+        },
+        "userName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Display name of the commenter"
+        },
+        "userLocation": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Location provided by the commenter"
+        },
+        "comment": {
+          "type": "string",
+          "maxLength": 1500,
+          "description": "Text body of the comment"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp when the comment was posted"
+        },
+        "upvotes": {
+          "type": "number",
+          "description": "Number of upvotes received"
+        }
+      },
+      "required": ["id", "articleId", "userId", "userName", "comment", "createdAt"]
     }
   },
   "firestore": {
@@ -72,6 +150,18 @@
         "$ref": "#/entities/User"
       },
       "description": "Stores user profile data, reading list bookmarks, newsletter subscriptions, and premium status"
+    },
+    "/articleLikes/{likeId}": {
+      "schema": {
+        "$ref": "#/entities/ArticleLike"
+      },
+      "description": "Stores article like records linked to authenticated user IDs"
+    },
+    "/articleComments/{commentId}": {
+      "schema": {
+        "$ref": "#/entities/ArticleComment"
+      },
+      "description": "Stores reader comments and discussion threads tied to articles and authenticated authors"
     }
   }
 }

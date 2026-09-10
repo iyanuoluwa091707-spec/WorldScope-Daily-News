@@ -8,11 +8,26 @@ import {
   ArrowLeft, 
   Check, 
   Radio, 
-  ThumbsUp, 
-  Send
+  Send,
+  Heart,
+  Lock,
+  LogIn,
+  UserPlus,
+  ShieldCheck,
+  Trash2,
+  Loader2,
+  User
 } from 'lucide-react';
 import { Article, CommentItem, AppUser } from '../types';
 import { ShareModal } from './ShareModal';
+import { 
+  subscribeToArticleLikes, 
+  toggleArticleLike, 
+  subscribeToArticleComments, 
+  postArticleComment, 
+  deleteArticleComment 
+} from '../lib/interactionService';
+import { auth } from '../lib/firebase';
 
 interface ArticleDetailViewProps {
   article: Article;
@@ -44,17 +59,58 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   onToast,
 }) => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [commentName, setCommentName] = useState(currentUser?.name || '');
   const [commentLocation, setCommentLocation] = useState('');
   const [commentBody, setCommentBody] = useState('');
   const [commentSuccess, setCommentSuccess] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
 
-  // Sync comment author with currentUser
+  // Likes state
+  const [likesCount, setLikesCount] = useState<number>(article.likesCount || 0);
+  const [hasLiked, setHasLiked] = useState<boolean>(false);
+  const [isLiking, setIsLiking] = useState<boolean>(false);
+
+  // Comments state synced with Firestore + local initial comments
+  const [commentsList, setCommentsList] = useState<CommentItem[]>(article.comments || []);
+
+  // Subscribe to real-time likes for this article in Cloud Firestore
   useEffect(() => {
-    if (currentUser?.name && !commentName) {
-      setCommentName(currentUser.name);
-    }
-  }, [currentUser, commentName]);
+    let active = true;
+    const unsub = subscribeToArticleLikes(article.id, ({ total, userIds }) => {
+      if (!active) return;
+      setLikesCount(total);
+      if (currentUser?.uid) {
+        setHasLiked(userIds.includes(currentUser.uid));
+      } else {
+        setHasLiked(false);
+      }
+    });
+
+    return () => {
+      active = false;
+      unsub?.();
+    };
+  }, [article.id, currentUser?.uid]);
+
+  // Subscribe to real-time comments for this article in Cloud Firestore
+  useEffect(() => {
+    let active = true;
+    const unsub = subscribeToArticleComments(article.id, (firestoreComments) => {
+      if (!active) return;
+      if (firestoreComments.length > 0) {
+        const firestoreIds = new Set(firestoreComments.map((c) => c.id));
+        const initialFiltered = (article.comments || []).filter((c) => !firestoreIds.has(c.id));
+        setCommentsList([...firestoreComments, ...initialFiltered]);
+      } else {
+        setCommentsList(article.comments || []);
+      }
+    });
+
+    return () => {
+      active = false;
+      unsub?.();
+    };
+  }, [article.id, article.comments]);
 
   const handleBookmarkToggle = () => {
     if (onToggleBookmark) {
@@ -72,25 +128,93 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
     window.print();
   };
 
-  const handleSubmitComment = (e: React.FormEvent) => {
+  // Toggle Like - Enforce authentication
+  const handleToggleLike = async () => {
+    if (!currentUser || !auth.currentUser) {
+      onToast?.('Account required: Only registered or logged-in users can like stories.');
+      onOpenAuth?.('signin');
+      return;
+    }
+
+    if (isLiking) return;
+    setIsLiking(true);
+
+    try {
+      const res = await toggleArticleLike(article.id, currentUser.name);
+      setHasLiked(res.isLiked);
+      setLikesCount((prev) => Math.max(0, prev + res.totalLikesChange));
+      if (res.isLiked) {
+        onToast?.(`Liked "${article.title.slice(0, 30)}..." ❤️`);
+      } else {
+        onToast?.('Removed like from story.');
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg === 'AUTH_REQUIRED') {
+        onToast?.('Please sign in or create an account to like posts.');
+        onOpenAuth?.('signin');
+      } else {
+        console.error('Error toggling like in Firestore:', err);
+      }
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  // Submit Comment - Enforce authentication
+  const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commentName.trim() || !commentBody.trim()) return;
+    if (!currentUser || !auth.currentUser) {
+      onToast?.('Account required: Only registered or logged-in users can comment on stories.');
+      onOpenAuth?.('signin');
+      return;
+    }
 
-    const newComment: CommentItem = {
-      id: `c-${Date.now()}`,
-      userName: commentName.trim(),
-      userLocation: commentLocation.trim() || 'UK',
-      comment: commentBody.trim(),
-      timestamp: 'Just now',
-      upvotes: 0,
-    };
+    if (!commentBody.trim()) return;
 
-    onAddComment(article.id, newComment);
-    setCommentName('');
-    setCommentLocation('');
-    setCommentBody('');
-    setCommentSuccess(true);
-    setTimeout(() => setCommentSuccess(false), 3000);
+    setIsSubmittingComment(true);
+    try {
+      const newComment = await postArticleComment(
+        article.id,
+        commentBody.trim(),
+        commentLocation.trim() || 'UK'
+      );
+
+      // Optimistic update
+      setCommentsList((prev) => [newComment, ...prev.filter((c) => c.id !== newComment.id)]);
+      onAddComment(article.id, newComment);
+      setCommentBody('');
+      setCommentSuccess(true);
+      onToast?.('Your comment has been published to the story discussion.');
+      setTimeout(() => setCommentSuccess(false), 4000);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg === 'AUTH_REQUIRED') {
+        onToast?.('Session expired. Please sign in to comment.');
+        onOpenAuth?.('signin');
+      } else {
+        console.error('Error posting comment to Firestore:', err);
+        onToast?.('Could not submit comment. Please check your connection.');
+      }
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  // Delete Comment (Author only)
+  const handleDeleteComment = async (commentId: string) => {
+    if (!currentUser || !auth.currentUser) return;
+    setDeletingCommentId(commentId);
+    try {
+      await deleteArticleComment(commentId);
+      setCommentsList((prev) => prev.filter((c) => c.id !== commentId));
+      onToast?.('Comment removed.');
+    } catch (err) {
+      console.error('Error deleting comment:', err);
+      onToast?.('Could not delete comment.');
+    } finally {
+      setDeletingCommentId(null);
+    }
   };
 
   return (
@@ -132,6 +256,24 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-2.5 text-gray-500 ml-auto sm:ml-0">
+          {/* Like Story Button (Top Bar) */}
+          <button
+            type="button"
+            onClick={handleToggleLike}
+            disabled={isLiking}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xs transition-colors cursor-pointer border min-h-[36px] ${
+              hasLiked
+                ? 'border-red-600 bg-red-50 dark:bg-red-950/40 text-red-600 font-bold'
+                : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white hover:border-black'
+            }`}
+            title={currentUser ? (hasLiked ? 'Unlike this story' : 'Like this story') : 'Sign in or create an account to like'}
+            aria-label="Like story"
+          >
+            <Heart className={`w-3.5 h-3.5 ${hasLiked ? 'fill-red-600 text-red-600' : ''}`} />
+            <span>{hasLiked ? 'Liked' : 'Like'}</span>
+            {likesCount > 0 && <span className="ml-1 text-[11px] font-bold">({likesCount})</span>}
+          </button>
+
           {/* Share Button (opens custom ShareModal) */}
           <button
             type="button"
@@ -326,14 +468,32 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
             </div>
           )}
 
-          {/* End of Story Share & Save Action Bar */}
+          {/* End of Story Like, Share & Save Action Bar */}
           <div className="mt-8 p-3.5 sm:p-4 bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-xs">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400">
-                Share or bookmark this story
+                Engage with this story
               </span>
             </div>
             <div className="flex flex-col xs:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5">
+              {/* Like Story Button */}
+              <button
+                type="button"
+                onClick={handleToggleLike}
+                disabled={isLiking}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer rounded-xs border min-h-[42px] ${
+                  hasLiked
+                    ? 'border-red-600 bg-red-600 text-white font-black'
+                    : 'border-neutral-300 dark:border-neutral-600 hover:border-black text-black dark:text-white bg-white dark:bg-neutral-900'
+                }`}
+                title={currentUser ? (hasLiked ? 'Unlike this story' : 'Like this story') : 'Sign in to like this story'}
+                aria-label={hasLiked ? 'Liked story' : 'Like story'}
+              >
+                <Heart className={`w-4 h-4 ${hasLiked ? 'fill-white text-white' : 'text-red-600'}`} />
+                <span>{hasLiked ? `Liked (${likesCount})` : `Like Story (${likesCount})`}</span>
+              </button>
+
+              {/* Share Story Button */}
               <button
                 type="button"
                 onClick={handleOpenShare}
@@ -343,13 +503,15 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
                 <Share2 className="w-4 h-4" />
                 <span>Share Story</span>
               </button>
+
+              {/* Save Story Button */}
               <button
                 type="button"
                 onClick={handleBookmarkToggle}
                 className={`px-4 py-2 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer rounded-xs border min-h-[42px] ${
                   isBookmarked
                     ? 'border-[#B80000] bg-[#B80000]/15 text-[#B80000] font-black'
-                    : 'border-neutral-300 dark:border-neutral-600 hover:border-black text-black dark:text-white'
+                    : 'border-neutral-300 dark:border-neutral-600 hover:border-black text-black dark:text-white bg-white dark:bg-neutral-900'
                 }`}
                 aria-label={isBookmarked ? 'Saved in Bookmarks' : 'Save Story'}
               >
@@ -361,85 +523,216 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 
           {/* Reader Discussion / Comments Section */}
           <section className="mt-12 pt-8 border-t border-gray-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-black uppercase tracking-tight flex items-center">
-                <MessageSquare className="w-5 h-5 mr-2" />
-                <span>Reader Discussion ({article.comments?.length || 0})</span>
-              </h3>
-              <span className="text-xs text-gray-400 font-medium">Moderated under WorldScope Code</span>
-            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+              <div className="flex items-center gap-3">
+                <h3 className="text-xl font-bold text-black uppercase tracking-tight flex items-center">
+                  <MessageSquare className="w-5 h-5 mr-2 text-neutral-800" />
+                  <span>Reader Discussion ({commentsList.length})</span>
+                </h3>
 
-            {/* Comment submission form */}
-            <form onSubmit={handleSubmitComment} className="bg-gray-50 border border-gray-200 p-5 mb-8 rounded-sm">
-              <h4 className="text-sm font-bold text-black uppercase tracking-wide mb-3">
-                Join the debate
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                <input
-                  type="text"
-                  placeholder="Your Name (e.g. Eleanor Rigby)"
-                  value={commentName}
-                  onChange={(e) => setCommentName(e.target.value)}
-                  className="p-2 text-xs border border-gray-300 bg-white focus:outline-none focus:border-black rounded-sm"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Location (e.g. Manchester, UK)"
-                  value={commentLocation}
-                  onChange={(e) => setCommentLocation(e.target.value)}
-                  className="p-2 text-xs border border-gray-300 bg-white focus:outline-none focus:border-black rounded-sm"
-                />
-              </div>
-              <textarea
-                placeholder="Share your perspective on this report..."
-                rows={3}
-                value={commentBody}
-                onChange={(e) => setCommentBody(e.target.value)}
-                className="w-full p-2 text-xs border border-gray-300 bg-white focus:outline-none focus:border-black mb-3 rounded-sm"
-                required
-              />
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-gray-500">
-                  Comments are published immediately to the editorial feed.
-                </span>
+                {/* Quick Like Pill */}
                 <button
-                  type="submit"
-                  className="bg-black text-white hover:bg-gray-800 text-xs font-bold px-4 py-2 uppercase tracking-wide flex items-center space-x-1 rounded-sm"
+                  type="button"
+                  onClick={handleToggleLike}
+                  disabled={isLiking}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border transition-colors cursor-pointer ${
+                    hasLiked
+                      ? 'bg-red-50 border-red-200 text-red-600'
+                      : 'bg-neutral-100 hover:bg-neutral-200 border-neutral-300 text-neutral-700'
+                  }`}
+                  title={currentUser ? (hasLiked ? 'Unlike' : 'Like') : 'Sign in to like'}
                 >
-                  <Send className="w-3.5 h-3.5 mr-1" />
-                  <span>Post Comment</span>
+                  <Heart className={`w-3.5 h-3.5 ${hasLiked ? 'fill-red-600 text-red-600' : 'text-neutral-500'}`} />
+                  <span>{likesCount} {likesCount === 1 ? 'Like' : 'Likes'}</span>
                 </button>
               </div>
-              {commentSuccess && (
-                <div className="mt-3 text-xs font-bold text-black bg-white p-2 border border-black flex items-center rounded-sm">
-                  <Check className="w-4 h-4 mr-1 text-black" />
-                  <span>Your comment has been published to the story.</span>
-                </div>
-              )}
-            </form>
 
-            {/* Comments list */}
-            {article.comments && article.comments.length > 0 ? (
-              <div className="space-y-4">
-                {article.comments.map((c) => (
-                  <div key={c.id} className="p-4 border border-gray-200 bg-white rounded-sm">
-                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                      <div>
-                        <span className="font-bold text-black mr-2">{c.userName}</span>
-                        <span>{c.userLocation}</span>
-                      </div>
-                      <span>{c.timestamp}</span>
-                    </div>
-                    <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-                      {c.comment}
-                    </p>
-                  </div>
-                ))}
+              <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Moderated WorldScope Forum</span>
+              </span>
+            </div>
+
+            {/* Authentication Gate: Only signed-in users can post comments */}
+            {!currentUser ? (
+              <div className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-6 sm:p-8 mb-8 rounded-sm text-center">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-300">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h4 className="text-base font-bold text-black dark:text-white uppercase tracking-wide mb-1.5">
+                  Sign in to like & join the discussion
+                </h4>
+                <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400 max-w-md mx-auto mb-5 leading-relaxed">
+                  Reader comments and story likes are exclusive to registered WorldScope members. Sign in or create a free account to contribute your perspective.
+                </p>
+                <div className="flex flex-col xs:flex-row items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onOpenAuth?.('signin')}
+                    className="w-full xs:w-auto bg-black hover:bg-neutral-800 text-white text-xs font-bold px-6 py-2.5 uppercase tracking-wider flex items-center justify-center gap-2 rounded-xs cursor-pointer min-h-[42px]"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>Sign In</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenAuth?.('register')}
+                    className="w-full xs:w-auto border border-black dark:border-white text-black dark:text-white hover:bg-black hover:text-white text-xs font-bold px-6 py-2.5 uppercase tracking-wider flex items-center justify-center gap-2 rounded-xs cursor-pointer min-h-[42px]"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Create Free Account</span>
+                  </button>
+                </div>
+                <div className="mt-4 flex items-center justify-center gap-2 text-[11px] text-neutral-500">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Cloud Firestore Verified • Real-Time Reader Discussion</span>
+                </div>
               </div>
             ) : (
-              <p className="text-xs text-gray-400 italic">
-                No comments submitted yet. Be the first to share your thoughts.
+              /* Authenticated Comment Submission Form */
+              <form onSubmit={handleSubmitComment} className="bg-gray-50 border border-gray-200 p-5 mb-8 rounded-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-black text-white flex items-center justify-center text-[10px] font-bold uppercase">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                    <span className="text-xs font-bold text-black">
+                      Signed in as <strong>{currentUser.name}</strong>
+                    </span>
+                    <span className="text-[11px] text-neutral-400">({currentUser.email})</span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-xs border border-emerald-200 flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Verified Member
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">
+                      Author Name
+                    </label>
+                    <input
+                      type="text"
+                      value={currentUser.name}
+                      disabled
+                      className="w-full p-2 text-xs border border-gray-300 bg-gray-100 text-gray-700 rounded-sm cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">
+                      Your Location (City, Country)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Manchester, UK"
+                      value={commentLocation}
+                      onChange={(e) => setCommentLocation(e.target.value)}
+                      className="w-full p-2 text-xs border border-gray-300 bg-white focus:outline-none focus:border-black rounded-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">
+                    Your Perspective
+                  </label>
+                  <textarea
+                    placeholder="Share your perspective on this report..."
+                    rows={3}
+                    maxLength={1500}
+                    value={commentBody}
+                    onChange={(e) => setCommentBody(e.target.value)}
+                    className="w-full p-2 text-xs border border-gray-300 bg-white focus:outline-none focus:border-black rounded-sm"
+                    required
+                  />
+                  <div className="flex items-center justify-between text-[10px] text-gray-400 mt-1">
+                    <span>Constructive debate encouraged under WorldScope editorial standards.</span>
+                    <span>{commentBody.length} / 1500</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  <span className="text-[11px] text-gray-500">
+                    Your comment is synced directly to Cloud Firestore.
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingComment || !commentBody.trim()}
+                    className="bg-black text-white hover:bg-gray-800 disabled:opacity-50 text-xs font-bold px-5 py-2.5 uppercase tracking-wide flex items-center justify-center space-x-1 rounded-sm cursor-pointer min-h-[38px]"
+                  >
+                    {isSubmittingComment ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                        <span>Publishing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5 mr-1.5" />
+                        <span>Post Comment</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {commentSuccess && (
+                  <div className="mt-3 text-xs font-bold text-black bg-white p-2.5 border border-black flex items-center rounded-sm">
+                    <Check className="w-4 h-4 mr-1.5 text-emerald-600" />
+                    <span>Your comment has been published to the story discussion.</span>
+                  </div>
+                )}
+              </form>
+            )}
+
+            {/* Comments list */}
+            {commentsList.length > 0 ? (
+              <div className="space-y-4">
+                {commentsList.map((c) => {
+                  const isAuthor = currentUser && (c.userId === currentUser.uid || currentUser.email === 'iyanuoluwa091707@gmail.com');
+                  return (
+                    <div key={c.id} className="p-4 border border-gray-200 bg-white rounded-sm">
+                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-black">{c.userName}</span>
+                          {c.userLocation && (
+                            <span className="text-neutral-500">• {c.userLocation}</span>
+                          )}
+                          {c.userId && (
+                            <span className="text-[10px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-xs font-medium">
+                              Verified
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span>{c.timestamp}</span>
+                          {isAuthor && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteComment(c.id)}
+                              disabled={deletingCommentId === c.id}
+                              className="text-neutral-400 hover:text-red-600 transition-colors cursor-pointer p-1"
+                              title="Delete your comment"
+                              aria-label="Delete your comment"
+                            >
+                              {deletingCommentId === c.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs sm:text-sm text-gray-700 leading-relaxed break-words">
+                        {c.comment}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic py-4">
+                No comments submitted yet. {currentUser ? 'Be the first to share your perspective!' : 'Sign in or create an account to start the conversation.'}
               </p>
             )}
           </section>
