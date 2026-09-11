@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Article, CategoryInfo, CommentItem, LiveUpdate, AppUser } from './types';
+import { Article, CategoryInfo, CommentItem, AppUser } from './types';
 import { INITIAL_ARTICLES } from './data/initialArticles';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import { Header } from './components/Header';
@@ -19,7 +18,12 @@ import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { RotateCcw } from 'lucide-react';
 import { auth } from './lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { getUserProfile } from './lib/userService';
+import {
+  getUserProfile,
+  updateUserProfileData,
+  toggleSavedArticleInFirestore,
+  clearUserSavedArticles,
+} from './lib/userService';
 
 const ARTICLES_STORAGE_KEY = 'worldscope_daily_articles_v3_50';
 const CATEGORIES_STORAGE_KEY = 'worldscope_daily_categories_v3_50';
@@ -71,18 +75,13 @@ export default function App() {
   >('home');
 
   const [selectedCategory, setSelectedCategory] = useState<string>('Home');
-
   const [selectedSubCategory, setSelectedSubCategory] = useState<
     string | undefined
   >(undefined);
-
-  const [selectedArticle, setSelectedArticle] =
-    useState<Article | null>(null);
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
 
   // Modals & Tools
-  const [isNewslettersModalOpen, setIsNewslettersModalOpen] =
-    useState(false);
-
+  const [isNewslettersModalOpen, setIsNewslettersModalOpen] = useState(false);
   const [newslettersInitialId, setNewslettersInitialId] = useState<
     string | undefined
   >(undefined);
@@ -101,107 +100,149 @@ export default function App() {
   });
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-
   const [authModalMode, setAuthModalMode] = useState<
     'signin' | 'register'
   >('signin');
 
-  // Listen for Firebase Auth state changes
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      async (firebaseUser) => {
-        if (firebaseUser) {
-          try {
-            const profile = await getUserProfile(firebaseUser.uid);
+  // Helper to load user-specific bookmarks
+  const loadUserBookmarks = (
+    uid: string,
+    profileSavedIds?: string[]
+  ): Article[] => {
+    try {
+      const userSaved = localStorage.getItem(
+        `worldscope_user_bookmarks_${uid}`
+      );
 
-            const user: AppUser = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name:
-                profile?.displayName ||
-                firebaseUser.displayName ||
-                firebaseUser.email?.split('@')[0] ||
-                'Reader',
-              photoURL:
-                profile?.photoURL ||
-                firebaseUser.photoURL ||
-                null,
-              providerId:
-                firebaseUser.providerData[0]?.providerId ||
-                'password',
-              savedArticles: profile?.savedArticles || [],
-              subscribedNewsletters:
-                profile?.subscribedNewsletters || [
-                  'global-dispatch',
-                ],
-              subscriptionTier:
-                profile?.subscriptionTier || 'basic',
-              subscriptionStatus:
-                profile?.subscriptionStatus || 'inactive',
-              subscriptionExpiry:
-                profile?.subscriptionExpiry,
-              subscribedAt:
-                profile?.subscribedAt,
-              createdAt:
-                profile?.createdAt ||
-                new Date().toISOString(),
-            };
+      if (userSaved) {
+        const parsed = JSON.parse(userSaved);
 
-            setCurrentUser(user);
-
-            localStorage.setItem(
-              'worldscope_current_user',
-              JSON.stringify(user)
-            );
-          } catch (err) {
-            console.error(
-              'Error synchronizing Firebase user profile:',
-              err
-            );
-          }
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
       }
-    );
+
+      if (profileSavedIds && profileSavedIds.length > 0) {
+        const matched = profileSavedIds
+          .map(
+            (id) =>
+              articles.find((a) => a.id === id) ||
+              INITIAL_ARTICLES.find((a) => a.id === id)
+          )
+          .filter((a): a is Article => Boolean(a));
+
+        if (matched.length > 0) {
+          localStorage.setItem(
+            `worldscope_user_bookmarks_${uid}`,
+            JSON.stringify(matched)
+          );
+
+          return matched;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading user bookmarks:', e);
+    }
+
+    return [];
+  };
+
+  // Listen for Firebase Auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const profile = await getUserProfile(firebaseUser.uid);
+
+          const user: AppUser = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name:
+              profile?.displayName ||
+              firebaseUser.displayName ||
+              firebaseUser.email?.split('@')[0] ||
+              'Reader',
+            photoURL: profile?.photoURL || firebaseUser.photoURL || null,
+            providerId:
+              firebaseUser.providerData[0]?.providerId || 'password',
+            savedArticles: profile?.savedArticles || [],
+            subscribedNewsletters:
+              profile?.subscribedNewsletters || ['global-dispatch'],
+            subscriptionTier: profile?.subscriptionTier || 'basic',
+            subscriptionStatus:
+              profile?.subscriptionStatus || 'inactive',
+            subscriptionExpiry: profile?.subscriptionExpiry,
+            subscribedAt: profile?.subscribedAt,
+            createdAt:
+              profile?.createdAt || new Date().toISOString(),
+          };
+
+          setCurrentUser(user);
+
+          localStorage.setItem(
+            'worldscope_current_user',
+            JSON.stringify(user)
+          );
+
+          const userBookmarks = loadUserBookmarks(
+            firebaseUser.uid,
+            profile?.savedArticles
+          );
+
+          setBookmarks(userBookmarks);
+        } catch (err) {
+          console.error(
+            'Error synchronizing Firebase user profile:',
+            err
+          );
+        }
+      } else {
+        setCurrentUser(null);
+        setBookmarks([]);
+        localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
+      }
+    });
 
     return () => unsubscribe();
-  }, []);
+  }, [articles]);
 
   // Subscription, Premium Newsletter, Advertising & Legal Modals
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] =
     useState(false);
 
-  const [
-    isPremiumNewsletterModalOpen,
-    setIsPremiumNewsletterModalOpen,
-  ] = useState(false);
-
-  const [isAdvertiseModalOpen, setIsAdvertiseModalOpen] =
+  const [isPremiumNewsletterModalOpen, setIsPremiumNewsletterModalOpen] =
     useState(false);
 
-  const [isLegalModalOpen, setIsLegalModalOpen] =
-    useState(false);
-
+  const [isAdvertiseModalOpen, setIsAdvertiseModalOpen] = useState(false);
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [legalInitialTab, setLegalInitialTab] =
     useState<LegalTab>('terms');
 
   // Bookmarks State & Modal
   const [bookmarks, setBookmarks] = useState<Article[]>(() => {
     try {
-      const saved = localStorage.getItem(
-        BOOKMARKS_STORAGE_KEY
-      );
+      const userStr = localStorage.getItem('worldscope_current_user');
 
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      if (userStr) {
+        const u = JSON.parse(userStr);
 
-        if (Array.isArray(parsed)) {
-          return parsed;
+        if (u?.uid) {
+          const saved = localStorage.getItem(
+            `worldscope_user_bookmarks_${u.uid}`
+          );
+
+          if (saved) {
+            const parsed = JSON.parse(saved);
+
+            if (Array.isArray(parsed)) {
+              return parsed;
+            }
+          }
         }
       }
     } catch (e) {
       console.error(
-        'Error loading bookmarks from localStorage',
+        'Error loading initial bookmarks from localStorage',
         e
       );
     }
@@ -216,10 +257,7 @@ export default function App() {
   const [showCookieBanner, setShowCookieBanner] =
     useState<boolean>(() => {
       try {
-        const consent = localStorage.getItem(
-          COOKIE_CONSENT_KEY
-        );
-
+        const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
         return !consent;
       } catch {
         return true;
@@ -227,87 +265,141 @@ export default function App() {
     });
 
   const handleToggleBookmark = (article: Article) => {
+    if (!currentUser) {
+      showToast(
+        'Please sign in or register to save stories to your personal library.'
+      );
+
+      handleOpenAuth('signin');
+      return;
+    }
+
     setBookmarks((prev) => {
       const exists = prev.some((b) => b.id === article.id);
 
-      let updated: Article[];
+      const updated = exists
+        ? prev.filter((b) => b.id !== article.id)
+        : [article, ...prev];
 
       if (exists) {
-        updated = prev.filter(
-          (b) => b.id !== article.id
-        );
-
         showToast(
-          `Removed "${article.title.slice(
-            0,
-            32
-          )}..." from saved stories.`
+          `Removed "${article.title.slice(0, 32)}..." from saved stories.`
         );
       } else {
-        updated = [article, ...prev];
-
         showToast(
-          `Saved "${article.title.slice(
-            0,
-            32
-          )}..." to your bookmarks!`
+          `Saved "${article.title.slice(0, 32)}..." to your bookmarks!`
         );
       }
 
       try {
         localStorage.setItem(
-          BOOKMARKS_STORAGE_KEY,
+          `worldscope_user_bookmarks_${currentUser.uid}`,
           JSON.stringify(updated)
         );
       } catch (e) {
-        console.error(
-          'Error persisting bookmarks',
-          e
-        );
+        console.error('Error persisting user bookmarks', e);
       }
+
+      const currentSavedIds =
+        currentUser.savedArticles || prev.map((b) => b.id);
+
+      toggleSavedArticleInFirestore(
+        currentUser.uid,
+        article.id,
+        currentSavedIds
+      )
+        .then((updatedIds) => {
+          setCurrentUser((prevUser) =>
+            prevUser
+              ? { ...prevUser, savedArticles: updatedIds }
+              : null
+          );
+        })
+        .catch((err) =>
+          console.error(
+            'Error syncing bookmark to Firestore:',
+            err
+          )
+        );
 
       return updated;
     });
   };
 
   const handleRemoveBookmark = (article: Article) => {
+    if (!currentUser) {
+      setBookmarks([]);
+      return;
+    }
+
     setBookmarks((prev) => {
-      const updated = prev.filter(
-        (b) => b.id !== article.id
-      );
+      const updated = prev.filter((b) => b.id !== article.id);
 
       try {
         localStorage.setItem(
-          BOOKMARKS_STORAGE_KEY,
+          `worldscope_user_bookmarks_${currentUser.uid}`,
           JSON.stringify(updated)
         );
       } catch (e) {
-        console.error(
-          'Error updating bookmarks',
-          e
-        );
+        console.error('Error updating bookmarks', e);
       }
+
+      const currentSavedIds =
+        currentUser.savedArticles || prev.map((b) => b.id);
+
+      toggleSavedArticleInFirestore(
+        currentUser.uid,
+        article.id,
+        currentSavedIds
+      )
+        .then((updatedIds) => {
+          setCurrentUser((prevUser) =>
+            prevUser
+              ? { ...prevUser, savedArticles: updatedIds }
+              : null
+          );
+        })
+        .catch((err) =>
+          console.error(
+            'Error removing bookmark from Firestore:',
+            err
+          )
+        );
 
       return updated;
     });
 
     showToast(
-      `Removed "${article.title.slice(
-        0,
-        30
-      )}..." from bookmarks.`
+      `Removed "${article.title.slice(0, 30)}..." from bookmarks.`
     );
   };
 
   const handleClearAllBookmarks = () => {
     setBookmarks([]);
 
-    try {
-      localStorage.removeItem(
-        BOOKMARKS_STORAGE_KEY
-      );
-    } catch (e) {
-      console.error(e);
+    if (currentUser) {
+      try {
+        localStorage.removeItem(
+          `worldscope_user_bookmarks_${currentUser.uid}`
+        );
+      } catch (e) {
+        console.error(e);
+      }
+
+      clearUserSavedArticles(currentUser.uid)
+        .then(() => {
+          setCurrentUser((prevUser) =>
+            prevUser
+              ? { ...prevUser, savedArticles: [] }
+              : null
+          );
+        })
+        .catch((err) =>
+          console.error(
+            'Error clearing saved articles in Firestore:',
+            err
+          )
+        );
     }
 
     showToast('Cleared all saved bookmarks.');
@@ -328,9 +420,7 @@ export default function App() {
 
     setShowCookieBanner(false);
 
-    showToast(
-      'Cookie preferences updated: All cookies accepted.'
-    );
+    showToast('Cookie preferences updated: All cookies accepted.');
   };
 
   const handleRejectNonEssentialCookies = () => {
@@ -360,29 +450,18 @@ export default function App() {
     setIsAuthModalOpen(true);
   };
 
-  const handleSignIn = (
-    email: string,
-    name?: string
-  ) => {
+  const handleSignIn = (email: string, name?: string) => {
     const user: AppUser = {
-      uid:
-        currentUser?.uid ||
-        `usr_${Date.now()}`,
+      uid: currentUser?.uid || `usr_${Date.now()}`,
       email,
-      name:
-        name ||
-        email.split('@')[0],
+      name: name || email.split('@')[0],
       subscriptionTier:
-        currentUser?.subscriptionTier ||
-        'basic',
+        currentUser?.subscriptionTier || 'basic',
       subscriptionStatus:
-        currentUser?.subscriptionStatus ||
-        'inactive',
-      subscriptionExpiry:
-        currentUser?.subscriptionExpiry,
+        currentUser?.subscriptionStatus || 'inactive',
+      subscriptionExpiry: currentUser?.subscriptionExpiry,
       createdAt:
-        currentUser?.createdAt ||
-        new Date().toISOString(),
+        currentUser?.createdAt || new Date().toISOString(),
     };
 
     setCurrentUser(user);
@@ -396,44 +475,31 @@ export default function App() {
       console.error(e);
     }
 
-    showToast(
-      `Signed in to WorldScope as ${user.name}`
-    );
+    showToast(`Signed in to WorldScope as ${user.name}`);
   };
 
   const handleSignOut = async () => {
     try {
       await signOut(auth);
     } catch (e) {
-      console.warn(
-        'Sign out warning:',
-        e
-      );
+      console.warn('Sign out warning:', e);
     }
 
     setCurrentUser(null);
+    setBookmarks([]);
 
     try {
-      localStorage.removeItem(
-        'worldscope_current_user'
-      );
-
-      localStorage.removeItem(
-        'bbc_current_user'
-      );
+      localStorage.removeItem('worldscope_current_user');
+      localStorage.removeItem('bbc_current_user');
+      localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
     } catch (e) {
       console.error(e);
     }
 
-    showToast(
-      'Signed out of WorldScope Account.'
-    );
+    showToast('Signed out of WorldScope Account.');
   };
 
-  // FIXED: Subscription callback now accepts the complete AppUser object
-  const handleSubscriptionSuccess = (
-    updatedUser: AppUser
-  ) => {
+  const handleUpdateUser = (updatedUser: AppUser) => {
     setCurrentUser(updatedUser);
 
     try {
@@ -442,24 +508,45 @@ export default function App() {
         JSON.stringify(updatedUser)
       );
     } catch (e) {
-      console.error(e);
+      console.error('Error updating user in storage', e);
     }
 
+    showToast('Profile updated successfully.');
+  };
+
+  // FIXED: SubscriptionPlansModal sends the complete updated AppUser
+  const handleSubscriptionSuccess = (updatedUser: AppUser) => {
+    setCurrentUser(updatedUser);
+
+    try {
+      localStorage.setItem(
+        'worldscope_current_user',
+        JSON.stringify(updatedUser)
+      );
+    } catch (e) {
+      console.error(
+        'Error saving subscribed user to localStorage:',
+        e
+      );
+    }
+
+    setIsSubscriptionModalOpen(false);
+
+    const tierName =
+      updatedUser.subscriptionTier?.toUpperCase() || 'PREMIUM';
+
     showToast(
-      `Subscribed to WorldScope ${(updatedUser.subscriptionTier || 'basic').toUpperCase()} Intelligence! Full access unlocked.`
+      `Subscribed to WorldScope ${tierName} Intelligence! Full access unlocked.`
     );
   };
 
-  const handleOpenNewsletters = (
-    initialId?: string
-  ) => {
+  const handleOpenNewsletters = (initialId?: string) => {
     setNewslettersInitialId(initialId);
     setIsNewslettersModalOpen(true);
   };
 
   // Global Search
-  const [searchQuery, setSearchQuery] =
-    useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Toast Notification
   const [toastMessage, setToastMessage] =
@@ -473,10 +560,7 @@ export default function App() {
         JSON.stringify(articles)
       );
     } catch (e) {
-      console.error(
-        'Error persisting articles',
-        e
-      );
+      console.error('Error persisting articles', e);
     }
   }, [articles]);
 
@@ -488,14 +572,11 @@ export default function App() {
         JSON.stringify(categories)
       );
     } catch (e) {
-      console.error(
-        'Error persisting categories',
-        e
-      );
+      console.error('Error persisting categories', e);
     }
   }, [categories]);
 
-  // List of all unique categories present in the system
+  // List of all unique categories
   const allCategoriesList = Array.from(
     new Set([
       ...categories.map((c) => c.name),
@@ -504,9 +585,7 @@ export default function App() {
   );
 
   // Breaking news articles
-  const breakingArticles = articles.filter(
-    (a) => a.isBreaking
-  );
+  const breakingArticles = articles.filter((a) => a.isBreaking);
 
   // Live search results
   const searchResults = searchQuery.trim()
@@ -514,21 +593,11 @@ export default function App() {
         const q = searchQuery.toLowerCase();
 
         return (
-          art.title
-            .toLowerCase()
-            .includes(q) ||
-          art.lead
-            .toLowerCase()
-            .includes(q) ||
-          art.category
-            .toLowerCase()
-            .includes(q) ||
-          art.author.name
-            .toLowerCase()
-            .includes(q) ||
-          art.tags.some((t) =>
-            t.toLowerCase().includes(q)
-          )
+          art.title.toLowerCase().includes(q) ||
+          art.lead.toLowerCase().includes(q) ||
+          art.category.toLowerCase().includes(q) ||
+          art.author.name.toLowerCase().includes(q) ||
+          art.tags.some((t) => t.toLowerCase().includes(q))
         );
       })
     : [];
@@ -542,12 +611,8 @@ export default function App() {
   };
 
   // Handler: Select Category
-  const handleSelectCategory = (
-    cat: string
-  ) => {
-    if (
-      cat.toLowerCase() === 'home'
-    ) {
+  const handleSelectCategory = (cat: string) => {
+    if (cat.toLowerCase() === 'home') {
       setCurrentView('home');
       setSelectedCategory('Home');
       setSelectedSubCategory(undefined);
@@ -566,16 +631,11 @@ export default function App() {
   };
 
   // Handler: Select Article
-  const handleSelectArticle = (
-    article: Article
-  ) => {
+  const handleSelectArticle = (article: Article) => {
     setArticles((prev) =>
       prev.map((a) =>
         a.id === article.id
-          ? {
-              ...a,
-              views: a.views + 1,
-            }
+          ? { ...a, views: a.views + 1 }
           : a
       )
     );
@@ -609,8 +669,7 @@ export default function App() {
           return {
             ...a,
             comments: updatedComments,
-            commentsCount:
-              updatedComments.length,
+            commentsCount: updatedComments.length,
           };
         }
 
@@ -633,8 +692,7 @@ export default function App() {
         return {
           ...prev,
           comments: updated,
-          commentsCount:
-            updated.length,
+          commentsCount: updated.length,
         };
       });
     }
@@ -652,17 +710,10 @@ export default function App() {
       )
     ) {
       setArticles(INITIAL_ARTICLES);
-      setCategories(
-        DEFAULT_CATEGORIES
-      );
+      setCategories(DEFAULT_CATEGORIES);
 
-      localStorage.removeItem(
-        ARTICLES_STORAGE_KEY
-      );
-
-      localStorage.removeItem(
-        CATEGORIES_STORAGE_KEY
-      );
+      localStorage.removeItem(ARTICLES_STORAGE_KEY);
+      localStorage.removeItem(CATEGORIES_STORAGE_KEY);
 
       setCurrentView('home');
       setSelectedCategory('Home');
@@ -675,7 +726,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-[#0e0e0e] text-black dark:text-[#f3f3f3] font-worldscope-sans selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black transition-colors duration-200">
-
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-5 right-5 z-50 bg-black text-white px-5 py-3 border-2 border-white shadow-2xl flex items-center space-x-3 text-xs sm:text-sm font-bold animate-in slide-in-from-bottom-5">
@@ -690,18 +740,10 @@ export default function App() {
         allCategoriesList={allCategoriesList}
         activeCategory={selectedCategory}
         activeSubCategory={selectedSubCategory}
-        onSelectCategory={
-          handleSelectCategory
-        }
-        onSelectSubCategory={
-          setSelectedSubCategory
-        }
-        onOpenArticle={
-          handleSelectArticle
-        }
-        breakingArticles={
-          breakingArticles
-        }
+        onSelectCategory={handleSelectCategory}
+        onSelectSubCategory={setSelectedSubCategory}
+        onOpenArticle={handleSelectArticle}
+        breakingArticles={breakingArticles}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         searchResults={searchResults}
@@ -712,13 +754,9 @@ export default function App() {
           setIsSubscriptionModalOpen(true)
         }
         onOpenPremiumNewsletter={() =>
-          setIsPremiumNewsletterModalOpen(
-            true
-          )
+          setIsPremiumNewsletterModalOpen(true)
         }
-        bookmarksCount={
-          bookmarks.length
-        }
+        bookmarksCount={bookmarks.length}
         onOpenBookmarks={() =>
           setIsBookmarksModalOpen(true)
         }
@@ -730,103 +768,62 @@ export default function App() {
           <HomeView
             articles={articles}
             categories={categories}
-            onSelectArticle={
-              handleSelectArticle
-            }
-            onSelectCategory={
-              handleSelectCategory
-            }
+            onSelectArticle={handleSelectArticle}
+            onSelectCategory={handleSelectCategory}
             bookmarks={bookmarks}
-            onToggleBookmark={
-              handleToggleBookmark
-            }
+            onToggleBookmark={handleToggleBookmark}
           />
         )}
 
         {currentView === 'category' && (
           <CategoryView
-            categoryName={
-              selectedCategory
-            }
+            categoryName={selectedCategory}
             categoryInfo={categories.find(
               (c) =>
                 c.name.toLowerCase() ===
                 selectedCategory.toLowerCase()
             )}
-            activeSubCategory={
-              selectedSubCategory
-            }
-            onSelectSubCategory={
-              setSelectedSubCategory
-            }
+            activeSubCategory={selectedSubCategory}
+            onSelectSubCategory={setSelectedSubCategory}
             articles={articles}
-            onSelectArticle={
-              handleSelectArticle
-            }
-            onOpenNewsletters={
-              handleOpenNewsletters
-            }
+            onSelectArticle={handleSelectArticle}
+            onOpenNewsletters={handleOpenNewsletters}
             bookmarks={bookmarks}
-            onToggleBookmark={
-              handleToggleBookmark
-            }
+            onToggleBookmark={handleToggleBookmark}
           />
         )}
 
-        {currentView === 'article' &&
-          selectedArticle && (
-            <ArticleDetailView
-              article={selectedArticle}
-              relatedArticles={articles.filter(
-                (a) =>
-                  a.id !==
-                    selectedArticle.id &&
-                  a.category.toLowerCase() ===
-                    selectedArticle.category.toLowerCase()
-              )}
-              onBack={() => {
-                if (
-                  selectedCategory &&
-                  selectedCategory.toLowerCase() !==
-                    'home'
-                ) {
-                  setCurrentView(
-                    'category'
-                  );
-                } else {
-                  setCurrentView(
-                    'home'
-                  );
-                }
-              }}
-              onSelectCategory={
-                handleSelectCategory
+        {currentView === 'article' && selectedArticle && (
+          <ArticleDetailView
+            article={selectedArticle}
+            relatedArticles={articles.filter(
+              (a) =>
+                a.id !== selectedArticle.id &&
+                a.category.toLowerCase() ===
+                  selectedArticle.category.toLowerCase()
+            )}
+            onBack={() => {
+              if (
+                selectedCategory &&
+                selectedCategory.toLowerCase() !== 'home'
+              ) {
+                setCurrentView('category');
+              } else {
+                setCurrentView('home');
               }
-              onSelectArticle={
-                handleSelectArticle
-              }
-              onAddComment={
-                handleAddComment
-              }
-              currentUser={
-                currentUser
-              }
-              onOpenAuth={
-                handleOpenAuth
-              }
-              isBookmarked={bookmarks.some(
-                (b) =>
-                  b.id ===
-                  selectedArticle.id
-              )}
-              onToggleBookmark={
-                handleToggleBookmark
-              }
-              onToast={(msg) =>
-                showToast(msg)
-              }
-            />
-          )}
+            }}
+            onSelectCategory={handleSelectCategory}
+            onSelectArticle={handleSelectArticle}
+            onAddComment={handleAddComment}
+            currentUser={currentUser}
+            onOpenAuth={handleOpenAuth}
+            isBookmarked={bookmarks.some(
+              (b) => b.id === selectedArticle.id
+            )}
+            onToggleBookmark={handleToggleBookmark}
+            onToast={(msg) => showToast(msg)}
+          />
+        )}
       </main>
 
       {/* Reset Data Control Bar */}
@@ -834,43 +831,30 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span className="text-[11px] font-medium">
             WorldScope Daily Wire •{' '}
-            <strong>
-              {articles.length} stories
-            </strong>{' '}
-            in editorial archive •{' '}
-            <strong>
-              50 latest articles per page
-            </strong>
+            <strong>{articles.length} stories</strong> in editorial
+            archive •{' '}
+            <strong>50 latest articles per page</strong>
           </span>
 
           <button
             type="button"
-            onClick={
-              handleResetData
-            }
+            onClick={handleResetData}
             className="text-[11px] font-semibold text-neutral-700 hover:text-black flex items-center space-x-1 underline cursor-pointer"
           >
             <RotateCcw className="w-3 h-3" />
-            <span>
-              Reset Demo Archive to 300
-              Stories
-            </span>
+            <span>Reset Demo Archive to 300 Stories</span>
           </button>
         </div>
       </div>
 
       {/* Footer */}
       <Footer
-        onSelectCategory={
-          handleSelectCategory
-        }
+        onSelectCategory={handleSelectCategory}
         onOpenSubscriptionPlans={() =>
           setIsSubscriptionModalOpen(true)
         }
         onOpenPremiumNewsletter={() =>
-          setIsPremiumNewsletterModalOpen(
-            true
-          )
+          setIsPremiumNewsletterModalOpen(true)
         }
         onOpenAdvertise={() =>
           setIsAdvertiseModalOpen(true)
@@ -882,105 +866,60 @@ export default function App() {
       />
 
       {/* Subscription Plans Modal */}
-      <SubscriptionPlansModal
-        isOpen={
-          isSubscriptionModalOpen
-        }
-        onClose={() =>
-          setIsSubscriptionModalOpen(
-            false
-          )
-        }
-        currentUser={currentUser}
-        onOpenAuth={handleOpenAuth}
-        onSubscriptionSuccess={
-          handleSubscriptionSuccess
-        }
-      />
-
+<SubscriptionPlansModal
+  isOpen={isSubscriptionModalOpen}
+  onClose={() => setIsSubscriptionModalOpen(false)}
+  currentUser={currentUser}
+  onOpenAuth={handleOpenAuth}
+  onSubscriptionSuccess={handleSubscriptionSuccess}
+/>
       {/* Premium Newsletter Reader & Paywall Modal */}
       <PremiumNewsletterModal
-        isOpen={
-          isPremiumNewsletterModalOpen
-        }
+        isOpen={isPremiumNewsletterModalOpen}
         onClose={() =>
-          setIsPremiumNewsletterModalOpen(
-            false
-          )
+          setIsPremiumNewsletterModalOpen(false)
         }
         currentUser={currentUser}
         onOpenSubscriptionPlans={() => {
-          setIsPremiumNewsletterModalOpen(
-            false
-          );
-          setIsSubscriptionModalOpen(
-            true
-          );
+          setIsPremiumNewsletterModalOpen(false);
+          setIsSubscriptionModalOpen(true);
         }}
         onOpenAuth={(mode) => {
-          setIsPremiumNewsletterModalOpen(
-            false
-          );
+          setIsPremiumNewsletterModalOpen(false);
           handleOpenAuth(mode);
         }}
       />
 
       {/* Commercial Advertising Modal */}
       <AdvertiseModal
-        isOpen={
-          isAdvertiseModalOpen
-        }
-        onClose={() =>
-          setIsAdvertiseModalOpen(false)
-        }
-        onSuccessToast={(msg) =>
-          showToast(msg)
-        }
+        isOpen={isAdvertiseModalOpen}
+        onClose={() => setIsAdvertiseModalOpen(false)}
+        onSuccessToast={(msg) => showToast(msg)}
       />
 
       {/* Legal & Editorial Policy Pages Modal */}
       <LegalPagesModal
-        isOpen={
-          isLegalModalOpen
-        }
-        onClose={() =>
-          setIsLegalModalOpen(false)
-        }
-        initialTab={
-          legalInitialTab
-        }
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialTab={legalInitialTab}
         onOpenSubscriptionPlans={() => {
           setIsLegalModalOpen(false);
-          setIsSubscriptionModalOpen(
-            true
-          );
+          setIsSubscriptionModalOpen(true);
         }}
       />
 
       {/* Free Newsletters Signup Modal */}
-      <NewslettersModal
+    <NewslettersModal
   isOpen={isNewslettersModalOpen}
-  onClose={() =>
-    setIsNewslettersModalOpen(false)
-  }
-  initialSelectedId={
-    newslettersInitialId
-  }
+  onClose={() => setIsNewslettersModalOpen(false)}
+  initialSelectedId={newslettersInitialId}
 />
       {/* Sign In & Registration Modal */}
       <AuthModal
-        isOpen={
-          isAuthModalOpen
-        }
-        onClose={() =>
-          setIsAuthModalOpen(false)
-        }
-        initialMode={
-          authModalMode
-        }
-        currentUser={
-          currentUser
-        }
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authModalMode}
+        currentUser={currentUser}
         onSignInSuccess={(user) => {
           setCurrentUser(user);
 
@@ -993,61 +932,45 @@ export default function App() {
             console.error(e);
           }
 
+          const userBookmarks = loadUserBookmarks(
+            user.uid,
+            user.savedArticles
+          );
+
+          setBookmarks(userBookmarks);
+
           showToast(
             `Signed in to WorldScope as ${user.name}`
           );
         }}
-        onSignIn={
-          handleSignIn
-        }
-        onSignOut={
-          handleSignOut
-        }
+        onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
+        onUpdateUser={handleUpdateUser}
       />
 
       {/* Bookmarks / Saved Stories Modal */}
       <BookmarksModal
-        isOpen={
-          isBookmarksModalOpen
-        }
+        isOpen={isBookmarksModalOpen}
         onClose={() =>
           setIsBookmarksModalOpen(false)
         }
-        bookmarks={
-          bookmarks
-        }
+        bookmarks={bookmarks}
         onSelectArticle={(art) => {
-          setIsBookmarksModalOpen(
-            false
-          );
-          handleSelectArticle(
-            art
-          );
+          setIsBookmarksModalOpen(false);
+          handleSelectArticle(art);
         }}
-        onRemoveBookmark={
-          handleRemoveBookmark
-        }
-        onClearAllBookmarks={
-          handleClearAllBookmarks
-        }
+        onRemoveBookmark={handleRemoveBookmark}
+        onClearAllBookmarks={handleClearAllBookmarks}
       />
 
       {/* Cookie Consent Banner */}
       <CookieConsentBanner
-        isOpen={
-          showCookieBanner
-        }
-        onAcceptAll={
-          handleAcceptAllCookies
-        }
+        isOpen={showCookieBanner}
+        onAcceptAll={handleAcceptAllCookies}
         onRejectNonEssential={
           handleRejectNonEssentialCookies
         }
-        onClose={() =>
-          setShowCookieBanner(
-            false
-          )
-        }
+        onClose={() => setShowCookieBanner(false)}
       />
     </div>
   );

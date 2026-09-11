@@ -1,47 +1,82 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { 
-  getAuth, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
+
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithCredential,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   updateProfile,
-  signOut, 
+  signOut,
   onAuthStateChanged,
-  type User as FirebaseUser 
+  type User as FirebaseUser
 } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+
+import {
+  getFirestore,
+  doc,
+  getDocFromServer
+} from 'firebase/firestore';
+
+import { getStorage } from 'firebase/storage';
+
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase App
-export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const app =
+  getApps().length > 0
+    ? getApp()
+    : initializeApp(firebaseConfig);
 
 // Initialize Firebase Auth
 export const auth = getAuth(app);
 
+// Initialize Firebase Storage
+export const storage = getStorage(app);
+
 // Initialize Google Auth Provider
-export const googleProvider = new GoogleAuthProvider();
+export const googleProvider =
+  new GoogleAuthProvider();
+
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
 // Initialize Cloud Firestore with dedicated database ID
 export const db = firebaseConfig.firestoreDatabaseId
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  ? getFirestore(
+      app,
+      firebaseConfig.firestoreDatabaseId
+    )
   : getFirestore(app);
 
 // Validate Connection to Firestore on boot
 export async function validateFirestoreConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.info('Connected to Firebase Firestore successfully.');
+    await getDocFromServer(
+      doc(db, 'test', 'connection')
+    );
+
+    console.info(
+      'Connected to Firebase Firestore successfully.'
+    );
+
     return true;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore client is offline or network is limited.');
+    if (
+      error instanceof Error &&
+      error.message.includes('the client is offline')
+    ) {
+      console.warn(
+        'Firestore client is offline or network is limited.'
+      );
     } else {
-      console.info('Firestore initialized and ready.');
+      console.info(
+        'Firestore initialized and ready.'
+      );
     }
+
     return false;
   }
 }
@@ -52,6 +87,8 @@ validateFirestoreConnection();
 // Export Firebase Auth Helpers
 export {
   signInWithPopup,
+  signInWithCredential,
+  GoogleAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,

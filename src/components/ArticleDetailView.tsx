@@ -142,7 +142,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
     try {
       const res = await toggleArticleLike(article.id, currentUser.name);
       setHasLiked(res.isLiked);
-      setLikesCount((prev) => Math.max(0, prev + res.totalLikesChange));
+      // Real-time listener subscribeToArticleLikes handles likesCount accurately without duplicate increments
       if (res.isLiked) {
         onToast?.(`Liked "${article.title.slice(0, 30)}..." ❤️`);
       } else {

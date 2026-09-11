@@ -20,6 +20,7 @@ import { CategoryInfo, Article, AppUser } from '../types';
 import { getCategoryTheme } from '../data/categoryThemes';
 import { Logo } from './Logo';
 import { DarkModeToggle } from './DarkModeToggle';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   categories: CategoryInfo[];
@@ -424,6 +425,8 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
+            <PWAInstallButton variant="header" />
+
             <DarkModeToggle className="p-1 sm:px-2.5 sm:py-1.5 shrink-0" />
 
             {currentUser ? (
@@ -448,9 +451,19 @@ export const Header: React.FC<HeaderProps> = ({
                   type="button"
                   onClick={() => onOpenAuth?.('signin')}
                   className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-black dark:text-white hover:underline cursor-pointer"
+                  title="View and edit profile"
                 >
-                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#B80000] text-white flex items-center justify-center text-xs font-bold shrink-0">
-                    {currentUser.name.charAt(0).toUpperCase()}
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#B80000] text-white flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden border border-black/10 dark:border-white/10">
+                    {currentUser.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt={currentUser.name}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      currentUser.name.charAt(0).toUpperCase()
+                    )}
                   </div>
                   <span className="hidden md:inline font-bold">{currentUser.name}</span>
                 </button>
@@ -591,12 +604,30 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="bg-neutral-100 dark:bg-[#1a1a1a] border-b border-neutral-200 dark:border-neutral-800 px-4 sm:px-6 py-2.5">
             {currentUser ? (
               <div className="flex items-center justify-between w-full max-w-3xl mx-auto">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-[#006def] text-white flex items-center justify-center text-xs font-bold">
-                    {currentUser.name.charAt(0).toUpperCase()}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenAuth?.('signin');
+                  }}
+                  className="flex items-center gap-2 cursor-pointer text-left"
+                >
+                  <div className="w-6 h-6 rounded-full bg-[#006def] text-white flex items-center justify-center text-xs font-bold overflow-hidden border border-black/10 dark:border-white/10 shrink-0">
+                    {currentUser.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt={currentUser.name}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      currentUser.name.charAt(0).toUpperCase()
+                    )}
                   </div>
-                  <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{currentUser.name}</span>
-                </div>
+                  <div>
+                    <span className="text-xs sm:text-sm font-bold text-black dark:text-white block">{currentUser.name}</span>
+                  </div>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -636,6 +667,13 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* PWA App Install Banner in Menu */}
+          <div className="px-4 sm:px-6 py-2 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#121212]">
+            <div className="w-full max-w-3xl mx-auto">
+              <PWAInstallButton variant="menu" />
+            </div>
           </div>
 
           {/* Saved Articles Quick Link Strip in Menu */}

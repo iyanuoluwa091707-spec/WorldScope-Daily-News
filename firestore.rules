@@ -39,7 +39,7 @@ service cloud.firestore {
              data.displayName is string && data.displayName.size() <= 100 &&
              data.createdAt is string && data.createdAt.size() <= 50 &&
              data.updatedAt is string && data.updatedAt.size() <= 50 &&
-             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+             (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 600000)) &&
              (!('savedArticles' in data) || (data.savedArticles is list && data.savedArticles.size() <= 200)) &&
              (!('subscribedNewsletters' in data) || (data.subscribedNewsletters is list && data.subscribedNewsletters.size() <= 50)) &&
              (!('subscriptionTier' in data) || (data.subscriptionTier is string && data.subscriptionTier in ['basic', 'premium', 'enterprise'])) &&

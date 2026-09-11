@@ -21,14 +21,26 @@ export interface UserProfile {
 const USERS_COLLECTION = 'users';
 const AD_INQUIRIES_COLLECTION = 'adInquiries';
 
+// Helper to prevent Firestore calls from hanging UI when connection is slow/offline
+function raceWithTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => {
+      console.warn(`Firestore call timed out after ${ms}ms, using fallback.`);
+      resolve(fallback);
+    }, ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Fetch a user's persisted profile and preferences from Firestore
  */
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   try {
     const userDocRef = doc(db, USERS_COLLECTION, uid);
-    const snapshot = await getDoc(userDocRef);
-    if (snapshot.exists()) {
+    const snapshot = await raceWithTimeout(getDoc(userDocRef), 3500, null);
+    if (snapshot && snapshot.exists()) {
       return snapshot.data() as UserProfile;
     }
     return null;
@@ -45,10 +57,23 @@ export async function syncUserProfile(
   user: FirebaseUser, 
   customDisplayName?: string
 ): Promise<UserProfile> {
+  const fallbackProfile: UserProfile = {
+    uid: user.uid,
+    email: user.email || '',
+    displayName: customDisplayName?.trim() || user.displayName || user.email?.split('@')[0] || 'Reader',
+    photoURL: user.photoURL || null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    savedArticles: [],
+    subscribedNewsletters: ['global-dispatch'],
+    subscriptionTier: 'basic',
+    subscriptionStatus: 'inactive',
+  };
+
   const userDocRef = doc(db, USERS_COLLECTION, user.uid);
   const now = new Date().toISOString();
 
-  try {
+  const syncPromise = (async () => {
     const existing = await getDoc(userDocRef);
     if (existing.exists()) {
       const existingData = existing.data() as UserProfile;
@@ -62,7 +87,8 @@ export async function syncUserProfile(
         updatedData.displayName = user.displayName;
       }
 
-      if (user.photoURL && user.photoURL !== existingData.photoURL) {
+      // Only set photoURL if existing profile does not already have a custom photo
+      if (!existingData.photoURL && user.photoURL) {
         updatedData.photoURL = user.photoURL;
       }
 
@@ -89,21 +115,13 @@ export async function syncUserProfile(
       await setDoc(userDocRef, newProfile);
       return newProfile;
     }
+  })();
+
+  try {
+    return await raceWithTimeout(syncPromise, 3500, fallbackProfile);
   } catch (error) {
     console.error('Error syncing user profile to Firestore:', error);
-    // Return fallback profile in case of offline/transient error
-    return {
-      uid: user.uid,
-      email: user.email || '',
-      displayName: customDisplayName?.trim() || user.displayName || user.email?.split('@')[0] || 'Reader',
-      photoURL: user.photoURL || null,
-      createdAt: now,
-      updatedAt: now,
-      savedArticles: [],
-      subscribedNewsletters: ['global-dispatch'],
-      subscriptionTier: 'basic',
-      subscriptionStatus: 'inactive',
-    };
+    return fallbackProfile;
   }
 }
 
@@ -191,6 +209,40 @@ export async function syncNewslettersToFirestore(
     });
   } catch (error) {
     console.error('Error updating newsletter subscriptions in Firestore:', error);
+  }
+}
+
+/**
+ * Update user profile details (displayName, photoURL) in Cloud Firestore
+ */
+export async function updateUserProfileData(
+  uid: string,
+  data: { displayName?: string; photoURL?: string | null }
+): Promise<void> {
+  try {
+    const userDocRef = doc(db, USERS_COLLECTION, uid);
+    await updateDoc(userDocRef, {
+      ...data,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error updating user profile in Firestore:', error);
+    throw error;
+  }
+}
+
+/**
+ * Clear all saved articles for a user in Cloud Firestore
+ */
+export async function clearUserSavedArticles(uid: string): Promise<void> {
+  try {
+    const userDocRef = doc(db, USERS_COLLECTION, uid);
+    await updateDoc(userDocRef, {
+      savedArticles: [],
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error clearing saved articles in Firestore:', error);
   }
 }
 
