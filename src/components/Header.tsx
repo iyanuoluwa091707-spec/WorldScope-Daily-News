@@ -20,7 +20,7 @@ import { CategoryInfo, Article, AppUser } from '../types';
 import { getCategoryTheme } from '../data/categoryThemes';
 import { Logo } from './Logo';
 import { DarkModeToggle } from './DarkModeToggle';
-import { PWAInstallButton } from './PWAInstallButton';
+
 
 interface HeaderProps {
   categories: CategoryInfo[];
@@ -425,8 +425,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            <PWAInstallButton variant="header" />
-
+         
             <DarkModeToggle className="p-1 sm:px-2.5 sm:py-1.5 shrink-0" />
 
             {currentUser ? (
@@ -670,11 +669,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* PWA App Install Banner in Menu */}
-          <div className="px-4 sm:px-6 py-2 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#121212]">
-            <div className="w-full max-w-3xl mx-auto">
-              <PWAInstallButton variant="menu" />
-            </div>
-          </div>
+        
 
           {/* Saved Articles Quick Link Strip in Menu */}
           <div className="bg-neutral-50 dark:bg-[#151515] border-b border-neutral-200 dark:border-neutral-800 px-4 sm:px-6 py-2.5">
